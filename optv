@@ -1,0 +1,118 @@
+#! /bin/bash
+
+CALLDIR="$(dirname "$(readlink "$0")")"
+cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
+
+REPOBASE="https://github.com/OpenParliamentTV/"
+REPOS="OpenParliamentTV-Alignment OpenParliamentTV-Parsers OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
+PARLIAMENTS="DE"
+LOGFILE=optv-update.log
+
+log () {
+   echo "$*"
+   echo "$(date -Is) $*" >> "$LOGFILE"
+}
+
+basic_check () {
+    # Basic check for repository directories
+    retcode=0
+    for d in $REPOS
+    do
+        if [ ! -d "$d" ]
+        then
+            echo "Missing repository $d - run $0 init"
+            retcode=1
+        fi
+    done
+    return $retcode
+}
+
+datadir () {
+    echo "OpenParliamentTV-Data-$1"
+}
+codedir () {
+    echo "OpenParliamentTV-Parsers/parliaments/$1"
+}
+
+command="$1"
+
+if [ "$command" = "init" ]
+# Repository structure initialization
+then
+    for d in $REPOS
+    do
+        if [ ! -d "$d" ]
+        then
+            git clone "${REPOBASE}${d}.git"
+        fi
+    done
+elif [ "$command" = "pull" ]
+# Repository code/data update
+then
+    # Update main repository
+    echo "Updating main"
+    git pull
+
+    # Update all git repositories
+    for d in $REPOS
+    do
+        echo "Updating $d"
+        ( cd "$d" && git pull )
+    done
+elif [ "$command" = "status" ]
+# Repository status
+then
+    git status
+    for d in $REPOS
+    do
+        if [ -d "$d" ]
+        then
+            ( cd "$d" && git status )
+        else
+            echo "$d is not present - you should run init"
+        fi
+    done
+    # docker-compose ps
+elif [ "$command" = "check" ]
+# Checks
+then
+    # Check repositories/dependencies/etc
+    basic_check
+    retcode=$?
+    # Check that PARLIAMENTS defined code/data is here
+    for p in $PARLIAMENTS
+    do
+        for d in "$(datadir $p)" "$(codedir $p)"
+        do
+            if [ ! -d "$d" ]
+            then
+                echo "Parliament ${p} - missing ${d}"
+                retcode=1
+            fi
+        done
+    done
+    # FIXME: pip requirements for Parsers
+    # FIXME: aeneas/other requirements for Alignment
+    exit $retcode
+elif [ "$command" = "update" ]
+# Data update
+then
+    for p in $PARLIAMENTS
+    do
+        cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
+        log "Updating data for $p"
+        ./update "$(datadir $p)" >> ${LOGFILE} 2>&1
+    done
+else
+    cat <<EOF
+$0 - handle OpenParliamentTV services
+
+Syntax: optv command
+with command being
+
+check - check necessary dependencies/dir layout
+init - initialize repositories
+pull - update all git repositories
+status - status of docker containers and git repositories
+EOF
+fi
