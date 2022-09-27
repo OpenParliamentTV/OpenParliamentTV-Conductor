@@ -4,7 +4,7 @@ CALLDIR="$(dirname "$(readlink -f "$0")")"
 cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
 
 REPOBASE="https://github.com/OpenParliamentTV/"
-REPOS="OpenParliamentTV-Alignment OpenParliamentTV-Parsers OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
+REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
 PARLIAMENTS="DE"
 LOGFILE=${CALLDIR}/optv-update.log
 
@@ -28,10 +28,10 @@ basic_check () {
 }
 
 datadir () {
-    echo "OpenParliamentTV-Data-$1"
+    echo "${CALLDIR}/OpenParliamentTV-Data-$1"
 }
 codedir () {
-    echo "OpenParliamentTV-Parsers/parliaments/$1"
+    echo "${CALLDIR}/OpenParliamentTV-Tools/optv/parliaments/$1"
 }
 
 command="$1"
@@ -100,8 +100,9 @@ then
     for p in $PARLIAMENTS
     do
         cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
-        log "Updating data for $p"
-        ./update "$(datadir $p)" >> ${LOGFILE} 2>&1
+        data="$(datadir $p)"
+        log "Updating data for $p into $data"
+        ./update "$data" >> "${LOGFILE}" 2>&1
     done
 else
     cat <<EOF
@@ -114,5 +115,6 @@ check - check necessary dependencies/dir layout
 init - initialize repositories
 pull - update all git repositories
 status - status of docker containers and git repositories
+update - update parliament data
 EOF
 fi
