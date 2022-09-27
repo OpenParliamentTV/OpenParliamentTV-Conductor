@@ -1,6 +1,6 @@
 #! /bin/bash
 
-CALLDIR="$(dirname "$(readlink "$0")")"
+CALLDIR="$(dirname "$(readlink -f "$0")")"
 cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
 
 REPOBASE="https://github.com/OpenParliamentTV/"
