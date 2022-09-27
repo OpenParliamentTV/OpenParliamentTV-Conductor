@@ -6,7 +6,7 @@ cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
 REPOBASE="https://github.com/OpenParliamentTV/"
 REPOS="OpenParliamentTV-Alignment OpenParliamentTV-Parsers OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
 PARLIAMENTS="DE"
-LOGFILE=optv-update.log
+LOGFILE=${CALLDIR}/optv-update.log
 
 log () {
    echo "$*"
