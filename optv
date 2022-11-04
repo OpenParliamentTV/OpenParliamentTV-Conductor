@@ -91,9 +91,14 @@ then
             fi
         done
     done
-    # FIXME: pip requirements for Parsers
-    # FIXME: aeneas/other requirements for Alignment
-    exit $retcode
+    python3 -c 'import aeneas' > /dev/null 2>&1
+    if [ ! $? ]
+    then
+        retcode=1
+        echo "The python module aeneas is not present. Run 'python3 -m pip install OpenParliamentTV-Tools/requirements.txt' to install it."
+        echo "Note that it depends on python3-dev and espeak-dev (on Debian)"
+        exit $retcode
+    fi
 elif [ "$command" = "update" ]
 # Data update
 then
