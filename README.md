@@ -22,3 +22,7 @@ OpenParliamentTV data backend.
 - Run `optv fullupdate` to do an update of the data and also run the
   time-alignment and NER extraction components.
 
+`update` and `fullupdate` store a log of the actions in
+`optv-update.log`. It can be used to monitor progress (with `tail -f`
+for instance) and identify actions that have been run afterwards.
+
