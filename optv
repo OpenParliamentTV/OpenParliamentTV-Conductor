@@ -6,6 +6,9 @@ cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
 REPOBASE="https://github.com/OpenParliamentTV/"
 REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
 PARLIAMENTS="DE"
+PERIOD=20
+# Make sure LOGFILE is an absolute path, since we may cd to some other
+# directories during the execution
 LOGFILE=${CALLDIR}/optv-update.log
 
 log () {
@@ -107,7 +110,17 @@ then
         cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
         data="$(datadir $p)"
         log "Updating data for $p into $data"
-        ./update "$data" >> "${LOGFILE}" 2>&1
+        ./workflow.py --period=$PERIOD --retry-count=20 "$data" >> "${LOGFILE}" 2>&1
+    done
+elif [ "$command" = "fullupdate" ]
+# Do full update + time align + NER
+then
+    for p in $PARLIAMENTS
+    do
+        cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
+        data="$(datadir $p)"
+        log "Updating+aligning+NER data for $p into $data"
+        ./workflow.py --period=$PERIOD --retry-count=20 --align-sentences --extract-entities "$data" >> "${LOGFILE}" 2>&1
     done
 else
     cat <<EOF
@@ -121,5 +134,6 @@ init - initialize repositories
 pull - update all git repositories
 status - status of docker containers and git repositories
 update - update parliament data
+fullupdate - do a full update+align+NER
 EOF
 fi
