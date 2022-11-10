@@ -94,14 +94,25 @@ then
             fi
         done
     done
-    python3 -c 'import aeneas' > /dev/null 2>&1
-    if [ ! $? ]
+    # Check python modules
+    for module in aeneas yaml feedparser lxml spacy
+    do
+        python3 -c "import ${module}" > /dev/null 2>&1
+        if [ ! $? ]
+        then
+            retcode=1
+            echo "The python module ${module} is not present. Run 'python3 -m pip install -r OpenParliamentTV-Tools/requirements.txt' to install it."
+            if [ "${module}" = "aeneas" ]
+            then
+                echo "Note that it depends on python3-dev and espeak-dev (on Debian, you can install them with `sudo apt install python3-dev espeak-dev`)"
+            fi
+        fi
+    done
+    if [ $retcode ]
     then
-        retcode=1
-        echo "The python module aeneas is not present. Run 'python3 -m pip install OpenParliamentTV-Tools/requirements.txt' to install it."
-        echo "Note that it depends on python3-dev and espeak-dev (on Debian)"
-        exit $retcode
+        echo "All checks OK"
     fi
+    exit $retcode
 elif [ "$command" = "update" ]
 # Data update
 then
