@@ -123,6 +123,16 @@ then
         log "Updating data for $p into $data"
         ./workflow.py --period=$PERIOD --retry-count=20 "$data" >> "${LOGFILE}" 2>&1
     done
+elif [ "$command" = "align" ]
+# Do time align
+then
+    for p in $PARLIAMENTS
+    do
+        cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
+        data="$(datadir $p)"
+        log "Aligning data for $p into $data"
+        ./workflow.py --period=$PERIOD --retry-count=20 --no-download-original --align-sentences "$data" >> "${LOGFILE}" 2>&1
+    done
 elif [ "$command" = "fullupdate" ]
 # Do full update + time align + NER
 then
@@ -145,6 +155,7 @@ init - initialize repositories
 pull - update all git repositories
 status - status of docker containers and git repositories
 update - update parliament data
+align - time-align files that need it
 fullupdate - do a full update+align+NER
 EOF
 fi
