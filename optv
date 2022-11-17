@@ -143,6 +143,15 @@ then
         log "Updating+aligning+NER data for $p into $data"
         ./workflow.py --period=$PERIOD --retry-count=20 --align-sentences --extract-entities "$data" >> "${LOGFILE}" 2>&1
     done
+elif [ "$command" = "publish" ]
+then
+    for p in $PARLIAMENTS
+    do
+        cd "$(datadir $p)" || { echo "Could not cd to the $(datadir $p) directory?!?" ; exit 1 ; }
+        git add original/media original/proceedings original/processed
+        git commit -m "optv publication on $(date -I)"
+        git push
+    done
 else
     cat <<EOF
 $0 - handle OpenParliamentTV services
@@ -157,5 +166,6 @@ status - status of docker containers and git repositories
 update - update parliament data
 align - time-align files that need it
 fullupdate - do a full update+align+NER
+publish - publish new files to git server
 EOF
 fi
