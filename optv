@@ -4,9 +4,11 @@ CALLDIR="$(dirname "$(readlink -f "$0")")"
 cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
 
 REPOBASE="https://github.com/OpenParliamentTV/"
-REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
+REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE OpenParliamentTV-NEL"
 PARLIAMENTS="DE"
 PERIOD=20
+LANGUAGE=deu
+NEL_DATA_DIR="${CALLDIR}/OpenParliamentTV-NEL/data/05_enhanced"
 # Make sure LOGFILE is an absolute path, since we may cd to some other
 # directories during the execution
 LOGFILE=${CALLDIR}/optv-update.log
@@ -39,6 +41,9 @@ codedir () {
 
 execute_command () {
     command=$1
+
+    # Used for download/update/fullupdate/align...
+    workflow_command="./workflow.py --lang=$LANGUAGE --period=$PERIOD --nel-data-dir=$NEL_DATA_DIR --retry-count=20"
 
     if [ "$command" = "init" ]
     # Repository structure initialization
@@ -122,7 +127,7 @@ execute_command () {
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Updating data for $p into $data"
-            ./workflow.py --period=$PERIOD --retry-count=20 "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --link-entities "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "update" ]
     # Download + time-align
@@ -132,7 +137,7 @@ execute_command () {
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Updating data for $p into $data"
-            ./workflow.py --period=$PERIOD --retry-count=20 --align-sentences "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "align" ]
     # Time align only without downloading first
@@ -142,7 +147,7 @@ execute_command () {
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Aligning data for $p into $data"
-            ./workflow.py --period=$PERIOD --retry-count=20 --no-download-original --align-sentences "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --no-download-original --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "fullupdate" ]
     # Do full update + time align + NER
@@ -152,7 +157,7 @@ execute_command () {
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Updating+aligning+NER data for $p into $data"
-            ./workflow.py --period=$PERIOD --retry-count=20 --align-sentences --extract-entities "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --link-entities --align-sentences --extract-entities "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "publish" ]
     then
