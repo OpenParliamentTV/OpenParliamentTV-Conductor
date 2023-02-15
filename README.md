@@ -13,9 +13,12 @@ OpenParliamentTV data backend.
   the -Tools repository for code and the -Data-DE repository for data
   files.
 
-- Run `optv check` to  make sure all dependencies are present (repositories, libs...)
+- Run `optv check` to make sure all dependencies are present
+  (repositories, libs...). If necessary, run `python3 -m pip install
+  -r OpenParliamentTV-Tools/requirements.txt` to install the python
+  requirements.
 
-- Run `optv update` to do the base update of the data in the data
+- Run `optv update` to do the standard update of the data in the data
   repository + time alignment. The period is configured at the
   beginning of the `optv` script.
 
