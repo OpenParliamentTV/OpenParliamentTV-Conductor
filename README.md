@@ -32,9 +32,10 @@ for instance) and identify actions that have been run afterwards.
 ## Day-to-day operation
 
 `optv` can accept multiple commands. For a day-to-day operation, we
-want to execute an update, then publish the data. We obtain this by running
+want to update info from the repository (in case another source
+updated the data), execute an update, then publish the data. We obtain
+this by running:
 
-`optv update publish`
+`optv pull update publish`
 
 This command can be put in a cron job to be run regularly.
-
