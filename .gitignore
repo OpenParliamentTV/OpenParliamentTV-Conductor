@@ -1,3 +1,6 @@
+# Ignore extracted repositories
+OpenParliamentTV-*/
+
 # Mac OS X
 .DS_Store
 .AppleDouble

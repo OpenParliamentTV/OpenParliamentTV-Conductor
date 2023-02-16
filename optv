@@ -4,11 +4,11 @@ CALLDIR="$(dirname "$(readlink -f "$0")")"
 cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
 
 REPOBASE="https://github.com/OpenParliamentTV/"
-REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE OpenParliamentTV-NEL"
+REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
 PARLIAMENTS="DE"
 PERIOD=20
 LANGUAGE=deu
-NEL_DATA_DIR="${CALLDIR}/OpenParliamentTV-NEL/data/05_enhanced"
+NEL_DATA_DIR="${CALLDIR}/OpenParliamentTV-Data-DE/entities"
 # Make sure LOGFILE is an absolute path, since we may cd to some other
 # directories during the execution
 LOGFILE=${CALLDIR}/optv-update.log
@@ -43,7 +43,7 @@ execute_command () {
     command=$1
 
     # Used for download/update/fullupdate/align...
-    workflow_command="./workflow.py --lang=$LANGUAGE --period=$PERIOD --nel-data-dir=$NEL_DATA_DIR --retry-count=20"
+    workflow_command="./workflow.py --lang=$LANGUAGE --period=$PERIOD --retry-count=20"
 
     if [ "$command" = "init" ]
     # Repository structure initialization
@@ -68,6 +68,8 @@ execute_command () {
             echo "Updating $d"
             ( cd "$d" && git pull )
         done
+        # Update NEL entities
+        curl --output "${NEL_DATA_DIR}/entities.json" "https://de.openparliament.tv/data/entity-dump/?type=all&wiki=true"
     elif [ "$command" = "status" ]
     # Repository status
     then
