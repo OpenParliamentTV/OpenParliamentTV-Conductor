@@ -122,24 +122,24 @@ execute_command () {
         fi
         exit $retcode
     elif [ "$command" = "download" ]
-    # Download only
+    # Download + link
     then
         for p in $PARLIAMENTS
         do
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Updating data for $p into $data"
-            ${workflow_command} --link-entities "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --download-original --merge-speeches --link-entities "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "update" ]
-    # Download + time-align
+    # Download + nel + time-align
     then
         for p in $PARLIAMENTS
         do
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Updating data for $p into $data"
-            ${workflow_command} --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --download-original --merge-speeches --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "align" ]
     # Time align only without downloading first
@@ -149,7 +149,17 @@ execute_command () {
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Aligning data for $p into $data"
-            ${workflow_command} --no-download-original --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
+        done
+    elif [ "$command" = "ner" ]
+    # NER only without any other action (downloading, time-align, entity linking)
+    then
+        for p in $PARLIAMENTS
+        do
+            cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
+            data="$(datadir $p)"
+            log "Aligning data for $p into $data"
+            ${workflow_command} --extract-entities "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "fullupdate" ]
     # Do full update + time align + NER
@@ -159,14 +169,16 @@ execute_command () {
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Updating+aligning+NER data for $p into $data"
-            ${workflow_command} --link-entities --align-sentences --extract-entities "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --download-original --merge-speeches --link-entities --align-sentences --extract-entities "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "publish" ]
     then
         for p in $PARLIAMENTS
         do
             cd "$(datadir $p)" || { echo "Could not cd to the $(datadir $p) directory?!?" ; exit 1 ; }
-            git add original/media original/proceedings processed
+            # We can simply add media and proceedings directory since
+            # the converted files are specified in .gitignore
+            git add original/media original/proceedings processed entities
             git commit -m "optv publication on $(date -I)"
             git push
         done
