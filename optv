@@ -69,7 +69,7 @@ execute_command () {
             ( cd "$d" && git pull )
         done
         # Update NEL entities
-        curl --output "${NEL_DATA_DIR}/entities.json" "https://de.openparliament.tv/data/entity-dump/?type=all&wiki=true"
+        mkdir -p "${NEL_DATA_DIR}" && curl --output "${NEL_DATA_DIR}/entities.json" "https://de.openparliament.tv/data/entity-dump/?type=all&wiki=true"
     elif [ "$command" = "status" ]
     # Repository status
     then
