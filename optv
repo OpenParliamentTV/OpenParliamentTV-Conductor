@@ -8,7 +8,7 @@ REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
 PARLIAMENTS="DE"
 PERIOD=20
 LANGUAGE=deu
-NEL_DATA_DIR="${CALLDIR}/OpenParliamentTV-Data-DE/entities"
+NEL_DATA_DIR="${CALLDIR}/OpenParliamentTV-Data-DE/metadata"
 # Make sure LOGFILE is an absolute path, since we may cd to some other
 # directories during the execution
 LOGFILE=${CALLDIR}/optv-update.log
