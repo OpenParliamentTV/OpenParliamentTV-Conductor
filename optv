@@ -178,7 +178,7 @@ execute_command () {
             cd "$(datadir $p)" || { echo "Could not cd to the $(datadir $p) directory?!?" ; exit 1 ; }
             # We can simply add media and proceedings directory since
             # the converted files are specified in .gitignore
-            git add original/media original/proceedings processed entities
+            git add original/media original/proceedings processed metadata
             git commit -m "optv publication on $(date -I)"
             git push
         done
