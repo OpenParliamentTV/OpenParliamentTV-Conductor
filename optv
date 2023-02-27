@@ -3,7 +3,7 @@
 CALLDIR="$(dirname "$(readlink -f "$0")")"
 cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
 
-REPOBASE="https://github.com/OpenParliamentTV/"
+REPOBASE="git@github.com:OpenParliamentTV/"
 REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
 PARLIAMENTS="DE"
 PERIOD=20
