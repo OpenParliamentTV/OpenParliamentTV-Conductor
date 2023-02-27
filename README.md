@@ -36,9 +36,11 @@ for instance) and identify actions that have been run afterwards.
 
 `optv` can accept multiple commands. For a day-to-day operation, we
 want to update info from the repository (in case another source
-updated the data), execute an update, then publish the data. We obtain
-this by running:
+updated the data), execute an update, then re-synchronise the repo
+(just in case other files were updated manually while the update
+process was running), then publish the data. We obtain this by
+running:
 
-`optv pull update publish`
+`optv pull update pull publish`
 
 This command can be put in a cron job to be run regularly.
