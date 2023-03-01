@@ -184,7 +184,7 @@ execute_command () {
             # We can simply add media and proceedings directory since
             # the converted files are specified in .gitignore
             git add original/media original/proceedings processed metadata
-            git commit -m "optv publication on $(date -I)"
+            git commit -m "optv publication on $(date -Iseconds)"
             git push
         done
     else
