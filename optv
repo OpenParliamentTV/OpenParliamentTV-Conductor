@@ -9,6 +9,8 @@ PARLIAMENTS="DE"
 PERIOD=20
 LANGUAGE=deu
 NEL_DATA_DIR="${CALLDIR}/OpenParliamentTV-Data-DE/metadata"
+# Specify NER API endpoint if needed
+NER_API_ENDPOINT=""
 # Make sure LOGFILE is an absolute path, since we may cd to some other
 # directories during the execution
 LOGFILE=${CALLDIR}/optv-update.log
@@ -159,7 +161,7 @@ execute_command () {
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Aligning data for $p into $data"
-            ${workflow_command} --extract-entities "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --ner-api-endpoint="$NER_API_ENDPOINT" --extract-entities "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "fullupdate" ]
     # Do full update + time align + NER
@@ -169,7 +171,7 @@ execute_command () {
             cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
             data="$(datadir $p)"
             log "Updating+aligning+NER data for $p into $data"
-            ${workflow_command} --download-original --merge-speeches --link-entities --align-sentences --extract-entities "$data" >> "${LOGFILE}" 2>&1
+            ${workflow_command} --download-original --merge-speeches --link-entities --align-sentences --ner-api-endpoint="$NER_API_ENDPOINT" --extract-entities "$data" >> "${LOGFILE}" 2>&1
         done
     elif [ "$command" = "publish" ]
     then
