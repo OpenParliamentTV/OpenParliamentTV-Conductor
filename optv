@@ -15,6 +15,9 @@ NER_API_ENDPOINT=""
 # directories during the execution
 LOGFILE=${CALLDIR}/optv-update.log
 
+CONFIG_FILE="${CALLDIR}/optv.config"
+[ -f "${CONFIG_FILE}" ] && . "${CONFIG_FILE}"
+
 log () {
    echo "$*"
    echo "$(date -Is) $*" >> "$LOGFILE"
