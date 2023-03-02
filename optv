@@ -5,7 +5,7 @@ cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
 
 REPOBASE="git@github.com:OpenParliamentTV/"
 REPOS="OpenParliamentTV-Tools OpenParliamentTV-Data-DE"
-PARLIAMENTS="DE"
+PARLIAMENT="DE"
 PERIOD=20
 LANGUAGE=deu
 NEL_DATA_DIR="${CALLDIR}/OpenParliamentTV-Data-DE/metadata"
@@ -66,15 +66,21 @@ execute_command () {
         # Update main repository
         echo "Updating main"
         git pull
+        retcode=$?
 
         # Update all git repositories
         for d in $REPOS
         do
             echo "Updating $d"
             ( cd "$d" && git pull )
+            if [ ! $? ]
+            then
+                retcode=1
+            fi
         done
         # Update NEL entities
-        mkdir -p "${NEL_DATA_DIR}" && curl --output "${NEL_DATA_DIR}/entities.json" "https://de.openparliament.tv/data/entity-dump/?type=all&wiki=true&exclude_document=true"
+        mkdir -p "${NEL_DATA_DIR}" && curl --fail --output "${NEL_DATA_DIR}/entities.json" "https://de.openparliament.tv/data/entity-dump/?type=all&wiki=true&exclude_document=true"
+        return $retcode
     elif [ "$command" = "status" ]
     # Repository status
     then
@@ -95,17 +101,14 @@ execute_command () {
         # Check repositories/dependencies/etc
         basic_check
         retcode=$?
-        # Check that PARLIAMENTS defined code/data is here
-        for p in $PARLIAMENTS
+        # Check that PARLIAMENT defined code/data is here
+        for d in "$(datadir $PARLIAMENT)" "$(codedir $PARLIAMENT)"
         do
-            for d in "$(datadir $p)" "$(codedir $p)"
-            do
-                if [ ! -d "$d" ]
-                then
-                    echo "Parliament ${p} - missing ${d}"
-                    retcode=1
-                fi
-            done
+            if [ ! -d "$d" ]
+            then
+                echo "Parliament ${PARLIAMENT} - missing ${d}"
+                retcode=1
+            fi
         done
         # Check python modules
         for module in aeneas yaml feedparser lxml spacy
@@ -125,68 +128,59 @@ execute_command () {
         then
             echo "All checks OK"
         fi
-        exit $retcode
+        return $retcode
     elif [ "$command" = "download" ]
     # Download + link
     then
-        for p in $PARLIAMENTS
-        do
-            cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
-            data="$(datadir $p)"
-            log "Updating data for $p into $data"
-            ${workflow_command} --download-original --merge-speeches --link-entities "$data" >> "${LOGFILE}" 2>&1
-        done
+        cd "$(codedir $PARLIAMENT)" || { echo "Could not cd to the $(codedir $PARLIAMENT) directory?!?" ; exit 1 ; }
+        data="$(datadir $PARLIAMENT)"
+        log "Updating data for $PARLIAMENT into $data"
+        ${workflow_command} --download-original --merge-speeches --link-entities "$data" >> "${LOGFILE}" 2>&1
+        return $?
     elif [ "$command" = "update" ]
     # Download + nel + time-align
     then
-        for p in $PARLIAMENTS
-        do
-            cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
-            data="$(datadir $p)"
-            log "Updating data for $p into $data"
-            ${workflow_command} --download-original --merge-speeches --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
-        done
+        cd "$(codedir $PARLIAMENT)" || { echo "Could not cd to the $(codedir $PARLIAMENT) directory?!?" ; exit 1 ; }
+        data="$(datadir $PARLIAMENT)"
+        log "Updating data for $PARLIAMENT into $data"
+        ${workflow_command} --download-original --merge-speeches --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
+        return $?
     elif [ "$command" = "align" ]
     # Time align only without downloading first
     then
-        for p in $PARLIAMENTS
-        do
-            cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
-            data="$(datadir $p)"
-            log "Aligning data for $p into $data"
-            ${workflow_command} --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
-        done
+        cd "$(codedir $PARLIAMENT)" || { echo "Could not cd to the $(codedir $PARLIAMENT) directory?!?" ; exit 1 ; }
+        data="$(datadir $PARLIAMENT)"
+        log "Aligning data for $PARLIAMENT into $data"
+        ${workflow_command} --link-entities --align-sentences "$data" >> "${LOGFILE}" 2>&1
+        return $?
     elif [ "$command" = "ner" ]
     # NER only without any other action (downloading, time-align, entity linking)
     then
-        for p in $PARLIAMENTS
-        do
-            cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
-            data="$(datadir $p)"
-            log "Aligning data for $p into $data"
-            ${workflow_command} --ner-api-endpoint="$NER_API_ENDPOINT" --extract-entities "$data" >> "${LOGFILE}" 2>&1
-        done
+        cd "$(codedir $PARLIAMENT)" || { echo "Could not cd to the $(codedir $PARLIAMENT) directory?!?" ; exit 1 ; }
+        data="$(datadir $PARLIAMENT)"
+        log "Aligning data for $PARLIAMENT into $data"
+        ${workflow_command} --ner-api-endpoint="$NER_API_ENDPOINT" --extract-entities "$data" >> "${LOGFILE}" 2>&1
+        return $?
     elif [ "$command" = "fullupdate" ]
     # Do full update + time align + NER
     then
-        for p in $PARLIAMENTS
-        do
-            cd "$(codedir $p)" || { echo "Could not cd to the $(codedir $p) directory?!?" ; exit 1 ; }
-            data="$(datadir $p)"
-            log "Updating+aligning+NER data for $p into $data"
-            ${workflow_command} --download-original --merge-speeches --link-entities --align-sentences --ner-api-endpoint="$NER_API_ENDPOINT" --extract-entities "$data" >> "${LOGFILE}" 2>&1
-        done
+        cd "$(codedir $PARLIAMENT)" || { echo "Could not cd to the $(codedir $PARLIAMENT) directory?!?" ; exit 1 ; }
+        data="$(datadir $PARLIAMENT)"
+        log "Updating+aligning+NER data for $PARLIAMENT into $data"
+        ${workflow_command} --download-original --merge-speeches --link-entities --align-sentences --ner-api-endpoint="$NER_API_ENDPOINT" --extract-entities "$data" >> "${LOGFILE}" 2>&1
+        return $?
     elif [ "$command" = "publish" ]
     then
-        for p in $PARLIAMENTS
-        do
-            cd "$(datadir $p)" || { echo "Could not cd to the $(datadir $p) directory?!?" ; exit 1 ; }
-            # We can simply add media and proceedings directory since
-            # the converted files are specified in .gitignore
-            git add original/media original/proceedings processed metadata
-            git commit -m "optv publication on $(date -Iseconds)"
-            git push
-        done
+        cd "$(datadir $PARLIAMENT)" || { echo "Could not cd to the $(datadir $PARLIAMENT) directory?!?" ; exit 1 ; }
+        # We can simply add media and proceedings directory since
+        # the converted files are specified in .gitignore
+        git add original/media original/proceedings processed metadata
+        git commit -m "optv publication on $(date -Iseconds)"
+        git push
+    elif [ "$command" = "debug" ]
+    then
+        log "Debugging info - exiting"
+        return 1
     else
         cat <<EOF
 $0 - handle OpenParliamentTV services
@@ -217,5 +211,8 @@ fi
 
 for command in "$@"
 do
-    execute_command "$command"
+    execute_command "$command" || {
+        log "Command $command failed - stopping pipeline execution"
+        exit 1
+    }
 done
