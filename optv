@@ -50,6 +50,10 @@ execute_command () {
     # Used for download/update/fullupdate/align...
     workflow_command="./workflow.py --lang=$LANGUAGE --period=$PERIOD --retry-count=20"
 
+    # Make sure that we are in the base directory
+    # (In case of multiple pipelined actions, some actions may change to another dir)
+    cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
+
     if [ "$command" = "init" ]
     # Repository structure initialization
     then
@@ -80,7 +84,7 @@ execute_command () {
             fi
         done
         # Update NEL entities
-        mkdir -p "${NEL_DATA_DIR}" && curl --fail --output "${NEL_DATA_DIR}/entities.json" "https://de.openparliament.tv/data/entity-dump/?type=all&wiki=true&exclude_document=true"
+        mkdir -p "${NEL_DATA_DIR}" && curl --silent --fail --output "${NEL_DATA_DIR}/entities.json" "https://de.openparliament.tv/data/entity-dump/?type=all&wiki=true&exclude_document=true"
         return $retcode
     elif [ "$command" = "status" ]
     # Repository status
@@ -133,9 +137,9 @@ execute_command () {
     elif [ "$command" = "download" ]
     # Download + link
     then
-        cd "$(codedir $PARLIAMENT)" || { echo "Could not cd to the $(codedir $PARLIAMENT) directory?!?" ; exit 1 ; }
         data="$(datadir $PARLIAMENT)"
         log "Updating data for $PARLIAMENT into $data"
+        cd "$(codedir $PARLIAMENT)" || { echo "Could not cd to the $(codedir $PARLIAMENT) directory?!?" ; exit 1 ; }
         ${workflow_command} --download-original --merge-speeches --link-entities "$data" >> "${LOGFILE}" 2>&1
         return $?
     elif [ "$command" = "update" ]
