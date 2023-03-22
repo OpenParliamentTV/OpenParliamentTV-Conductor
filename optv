@@ -67,7 +67,6 @@ execute_command () {
     elif [ "$command" = "pull" ]
     # Repository code/data update
     then
-        cd "${CALLDIR}" || { echo "Could not cd to the script directory?!?" ; exit 1 ; }
         # Update main repository
         echo "Updating main"
         git pull
