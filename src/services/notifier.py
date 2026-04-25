@@ -1,6 +1,9 @@
 """Slack webhook notifier.
 
-Follows the message format in `_planning/optv-import-manager-plan.md §Slack Notifications`.
+Sends a job-result attachment per completed run. Colour and emoji encode the
+outcome (green/success, yellow/partial, red/failure); fields show duration and
+session counts; failed sessions are listed in the message body (truncated at
+10). The full payload is built in `SlackNotifier._build_message`.
 """
 
 from __future__ import annotations
