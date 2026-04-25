@@ -1,0 +1,21 @@
+{% set sub = active_sub|default("") %}
+<div class="border-t border-slate-100 bg-slate-50">
+  <div class="max-w-7xl mx-auto px-4 py-2 flex items-center gap-6 text-sm">
+    <a href="/parliaments/{{ parliament.id }}"
+       class="px-2 py-1 rounded {% if sub == 'overview' %}bg-white border border-slate-200 text-blue-700{% else %}text-slate-600 hover:text-blue-700{% endif %}">
+      Overview
+    </a>
+    <a href="/parliaments/{{ parliament.id }}/sessions"
+       class="px-2 py-1 rounded {% if sub == 'sessions' %}bg-white border border-slate-200 text-blue-700{% else %}text-slate-600 hover:text-blue-700{% endif %}">
+      Sessions
+    </a>
+    <a href="/parliaments/{{ parliament.id }}/jobs"
+       class="px-2 py-1 rounded {% if sub == 'jobs' %}bg-white border border-slate-200 text-blue-700{% else %}text-slate-600 hover:text-blue-700{% endif %}">
+      Jobs
+    </a>
+    <a href="/parliaments/{{ parliament.id }}/schedules"
+       class="px-2 py-1 rounded {% if sub == 'schedules' %}bg-white border border-slate-200 text-blue-700{% else %}text-slate-600 hover:text-blue-700{% endif %}">
+      Schedules
+    </a>
+  </div>
+</div>

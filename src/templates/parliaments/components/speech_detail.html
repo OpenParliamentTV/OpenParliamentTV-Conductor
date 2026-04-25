@@ -1,0 +1,42 @@
+{% if speech.video_uri %}
+<div class="grid grid-cols-2 gap-4 items-start">
+  <div class="aspect-video overflow-y-auto space-y-2">
+    {% if speech.agenda_item %}
+    <div class="text-xs text-slate-500">Agenda: {{ speech.agenda_item }}</div>
+    {% endif %}
+    {% for block in speech.text_body %}
+    <div class="{% if block.type == 'comment' %}text-slate-500 italic text-xs{% else %}text-sm{% endif %}">
+      {% if block.speaker and block.type != 'comment' %}
+        <span class="font-medium">{{ block.speaker }}:</span>
+      {% endif %}
+      {{ block.text }}
+    </div>
+    {% else %}
+    <div class="text-slate-500 text-sm">No text.</div>
+    {% endfor %}
+    {% if speech.duration %}
+    <div class="text-xs text-slate-400">duration: {{ speech.duration }}s</div>
+    {% endif %}
+  </div>
+  <video controls preload="metadata" class="w-full aspect-video rounded bg-black" src="{{ speech.video_uri }}"></video>
+</div>
+{% else %}
+{% if speech.agenda_item %}
+<div class="text-xs text-slate-500 mb-2">Agenda: {{ speech.agenda_item }}</div>
+{% endif %}
+<div class="space-y-2">
+  {% for block in speech.text_body %}
+  <div class="{% if block.type == 'comment' %}text-slate-500 italic text-xs{% else %}text-sm{% endif %}">
+    {% if block.speaker and block.type != 'comment' %}
+      <span class="font-medium">{{ block.speaker }}:</span>
+    {% endif %}
+    {{ block.text }}
+  </div>
+  {% else %}
+  <div class="text-slate-500 text-sm">No text.</div>
+  {% endfor %}
+</div>
+{% if speech.duration %}
+<div class="text-xs text-slate-400 mt-3">duration: {{ speech.duration }}s</div>
+{% endif %}
+{% endif %}

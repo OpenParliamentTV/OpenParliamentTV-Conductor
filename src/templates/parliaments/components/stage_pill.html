@@ -1,0 +1,13 @@
+{# expects: stage (str), status (str: complete|partial|failed|never_run|pending), compact (bool, default false) #}
+{% set classes = {
+  "complete": "bg-green-100 text-green-800",
+  "partial":  "bg-amber-100 text-amber-800",
+  "failed":   "bg-red-100 text-red-800",
+  "pending":  "bg-slate-100 text-slate-500",
+  "never_run": "bg-slate-100 text-slate-400",
+} %}
+{% set cls = classes.get(status, "bg-slate-100 text-slate-500") %}
+<span class="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded {{ cls }}"
+      title="{{ stage }}: {{ status }}">
+  {{ stage }}
+</span>

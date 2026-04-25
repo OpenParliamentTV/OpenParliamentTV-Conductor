@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Session {{ summary.id }} — {{ parliament.name }}{% endblock %}
+{% block content %}
+{% set stages = ["download","parse","merge","nel","align","ner"] %}
+<div x-data="{ showRerun: false, openAgenda: 0 }" class="space-y-6">
+  <div class="flex items-start justify-between">
+    <div>
+      <a href="/parliaments/{{ parliament.id }}/sessions"
+         class="text-xs text-blue-600 hover:underline">← all sessions</a>
+      <h1 class="text-xl font-semibold font-mono mt-1">{{ summary.id }}</h1>
+      <div class="text-sm text-slate-600 mt-1">
+        {% if summary.date_start %}{{ summary.date_start }}{% endif %}
+        {% if summary.date_end %} → {{ summary.date_end }}{% endif %}
+        {% if summary.duration_seconds %}
+          · {{ (summary.duration_seconds // 3600) }}h {{ ((summary.duration_seconds % 3600) // 60) }}m
+        {% endif %}
+      </div>
+    </div>
+    <button type="button"
+            @click="showRerun = true"
+            class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-2 rounded">
+      Re-run this session
+    </button>
+  </div>
+
+  <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="bg-white border border-slate-200 rounded-lg p-3">
+      <div class="text-xs text-slate-500">Speeches</div>
+      <div class="text-2xl font-semibold">{{ summary.speech_count }}</div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-lg p-3">
+      <div class="text-xs text-slate-500">Agenda items</div>
+      <div class="text-2xl font-semibold">{{ summary.agenda_item_count }}</div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-lg p-3 col-span-2">
+      <div class="text-xs text-slate-500 mb-1">Pipeline</div>
+      <div class="flex flex-wrap gap-1">
+        {% for stage in stages %}
+          {% set detail = summary.status.get(stage, {}) %}
+          {% set st = detail.status if detail is mapping else detail %}
+          {% with stage=stage, status=st %}
+            {% include "parliaments/components/stage_pill.html" %}
+          {% endwith %}
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="space-y-2">
+<div class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
+      {% for item in agenda_items %}
+      <div>
+        <div class="sticky top-0 z-10 bg-white w-full flex items-center gap-3 px-4 py-3 border-b border-slate-100">
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium truncate">
+              {{ item.title }}
+              {% if item.plain_title and item.plain_title != item.title %}
+              <span class="text-slate-400 font-normal mx-1">·</span>{{ item.plain_title }}
+              {% endif %}
+            </div>
+            <div class="text-xs text-slate-400">{{ item.speech_count }} speech{{ "es" if item.speech_count != 1 else "" }}</div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0 text-[10px] uppercase tracking-wide text-slate-400">
+            <div class="w-20 text-center">aligned</div>
+            <div class="w-44 text-center">text passes import rules</div>
+          </div>
+        </div>
+        <div class="divide-y divide-slate-100 border-t border-slate-100 ml-4">
+          {% for speech in item.speeches %}
+          <div x-data="{ detailOpen: false }" :class="detailOpen ? 'ring-1 ring-blue-300 my-px' : ''">
+            <button type="button"
+                    @click="detailOpen = !detailOpen;
+                            if (detailOpen && !$refs.pane.dataset.loaded) {
+                              htmx.ajax('GET',
+                                '/parliaments/{{ parliament.id }}/sessions/{{ summary.id }}/speeches/{{ speech.speech_index }}',
+                                {target: $refs.pane, swap: 'innerHTML'});
+                              $refs.pane.dataset.loaded = '1';
+                            }"
+                    class="w-full px-4 py-2 hover:bg-slate-50 text-left flex items-center justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-slate-400 font-mono">#{{ speech.speech_index }}</span>
+                  <span class="text-sm font-medium">{{ speech.speaker or "(unknown)" }}</span>
+                  {% if speech.has_video %}<span class="text-[10px] text-slate-400">🎬</span>{% endif %}
+                </div>
+                <div class="text-xs text-slate-600 truncate">{{ speech.preview }}</div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <div class="w-20 text-center">
+                  {% if speech.status.aligned %}
+                    <span class="inline-block px-2 py-0.5 rounded text-[11px] bg-green-100 text-green-800"
+                          title="time-alignment ran for this speech">&#10003;</span>
+                  {% else %}
+                    <span class="inline-block px-2 py-0.5 rounded text-[11px] bg-slate-50 text-slate-300"
+                          title="no alignment data">&ndash;</span>
+                  {% endif %}
+                </div>
+                <div class="w-44 text-center">
+                  {% set c = speech.status.confidence %}
+                  {% set lmc = speech.status.linked_media_count %}
+                  {% if speech.status.importable %}
+                    <span class="inline-block px-2 py-0.5 rounded text-[11px] bg-green-100 text-green-800"
+                          title="{% if c is none %}merge has not run — media-only record, still imported{% else %}confidence {{ c }} · 1 linked media — text is imported{% endif %}">
+                      {% if c is none %}no conf (media only){% else %}conf {{ "%g"|format(c) }}{% endif %}
+                    </span>
+                  {% else %}
+                    <span class="inline-block px-2 py-0.5 rounded text-[11px] bg-red-100 text-red-800"
+                          title="text is skipped: platform only imports text at confidence 1.0 with exactly 1 linked media">conf {{ "%g"|format(c) }}{% if lmc != 1 %} · {{ lmc }} media{% endif %}</span>
+                  {% endif %}
+                </div>
+              </div>
+            </button>
+            <div x-show="detailOpen" x-cloak x-ref="pane" class="px-4 py-3 bg-slate-50 text-sm">
+              Loading…
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+
+      <div class="px-4 py-3 text-sm text-slate-500">No agenda items.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# Rerun modal #}
+  <div x-show="showRerun" x-cloak
+       class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+       @keydown.escape.window="showRerun = false">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+      <h3 class="text-lg font-semibold mb-2">Re-run session {{ summary.id }}</h3>
+      <form hx-post="/parliaments/{{ parliament.id }}/sessions/bulk-rerun"
+            hx-swap="none"
+            @htmx:after-request="showRerun = false">
+        <input type="hidden" name="ids" value="{{ summary.id }}" />
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          {% for s in stages %}
+          <label class="flex items-center gap-2">
+            <input type="checkbox" name="stages" value="{{ s }}" /> {{ s }}
+          </label>
+          {% endfor %}
+        </div>
+        <label class="flex items-center gap-2 mt-3 text-sm">
+          <input type="checkbox" name="force" value="1" /> force
+        </label>
+        <div class="flex justify-end gap-2 mt-4">
+          <button type="button" class="px-3 py-1 rounded border" @click="showRerun = false">Cancel</button>
+          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Re-run</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

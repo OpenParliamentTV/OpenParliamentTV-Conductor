@@ -1,0 +1,52 @@
+{% if job %}
+<div class="space-y-2">
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="font-medium">{{ job.parliament }} · {{ job.stages | join(" → ") }}</div>
+      <div class="text-xs text-slate-500">
+        {{ job.id[:8] }} · {{ job.source }}{% if job.schedule_id %} ({{ job.schedule_id }}){% endif %}
+        · started {{ job.started_at or "—" }}
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-xs px-2 py-1 rounded
+        {% if job.status == 'running' %}bg-blue-100 text-blue-800
+        {% elif job.status == 'success' %}bg-green-100 text-green-800
+        {% elif job.status == 'failed' %}bg-red-100 text-red-800
+        {% elif job.status == 'partial' %}bg-amber-100 text-amber-800
+        {% elif job.status == 'cancelled' %}bg-slate-200 text-slate-700
+        {% else %}bg-slate-100 text-slate-700{% endif %}">
+        {{ job.status }}{% if job.stage %} · {{ job.stage }}{% endif %}
+      </span>
+      {% if job.status in ('queued', 'running') %}
+      <button class="text-xs text-red-600 hover:underline"
+              hx-post="/api/parliaments/{{ job.parliament }}/jobs/{{ job.id }}/cancel"
+              hx-swap="none"
+              hx-confirm="Cancel this job?">cancel</button>
+      {% endif %}
+      <a href="/parliaments/{{ job.parliament }}/jobs/{{ job.id }}"
+         class="text-xs text-blue-600 hover:underline">logs</a>
+    </div>
+  </div>
+  {% if job.sessions_total %}
+  <div class="h-2 bg-slate-100 rounded overflow-hidden">
+    <div class="h-full bg-blue-500"
+         style="width: {{ ([job.sessions_completed or 0, job.sessions_total] | min) / job.sessions_total * 100 }}%"></div>
+  </div>
+  <div class="text-xs text-slate-500">
+    {{ job.sessions_completed or 0 }}/{{ job.sessions_total }} sessions
+    {% if job.current_session %}· current {{ job.current_session }}{% endif %}
+  </div>
+  {% elif job.sessions_completed or job.current_session %}
+  <div class="text-xs text-slate-500">
+    {{ job.sessions_completed or 0 }} session{{ '' if job.sessions_completed == 1 else 's' }} processed
+    {% if job.current_session %}· current {{ job.current_session }}{% endif %}
+  </div>
+  {% endif %}
+  {% if job.error %}
+  <div class="text-xs text-red-700">{{ job.error }}</div>
+  {% endif %}
+</div>
+{% else %}
+<div class="text-sm text-slate-500">No job running.</div>
+{% endif %}

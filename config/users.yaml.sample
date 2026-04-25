@@ -1,0 +1,16 @@
+# Authorized Users
+#
+# SETUP: cp users.yaml.sample users.yaml
+#        Add GitHub usernames of authorized users
+#
+# Roles:
+#   admin  - Full access (jobs, schedules, settings)
+#   editor - Run jobs, view logs (no schedule editing)
+#   viewer - Read-only dashboard access
+
+users:
+  - username: "your-github-username"
+    role: admin
+
+  # - username: "colleague"
+  #   role: editor

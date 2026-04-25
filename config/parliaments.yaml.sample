@@ -1,0 +1,78 @@
+# Parliament Configuration
+#
+# SETUP: cp parliaments.yaml.sample parliaments.yaml
+#
+# Most per-parliament metadata (name, language, periods, supported_stages,
+# entity_dump_url, retry tuning) lives in the Tools repo at
+# `optv/parliaments/<id>/manifest.yaml` — this file holds only what the
+# *deployment* needs to know: which parliaments to enable, where their
+# Data repos live on git, and any deployment-specific overrides.
+#
+# Adding a new parliament: ship a manifest.yaml in the Tools repo, then add
+# a 2-line block here with `git_remote` + `stages`, then re-run setup.sh.
+#
+# Override behavior: any field that would normally come from the manifest
+# (e.g. `entity_dump_url`, `retry_count`, `language`) can be overridden here
+# per-parliament if your deployment needs to deviate from the upstream defaults.
+
+defaults:
+  # Where the Tools repo lives on disk inside the container.
+  tools_dir: /data/OpenParliamentTV-Tools
+  # Per-parliament data dirs default to <data_root>/OpenParliamentTV-Data-<id>.
+  data_root: /data
+
+parliaments:
+  # ═══════════════════════════════════════════════════════════
+  # German Bundestag — Reference Implementation
+  # ═══════════════════════════════════════════════════════════
+  DE:
+    # Required: where setup.sh clones from + where publish pushes to.
+    git_remote: "git@github.com:OpenParliamentTV/OpenParliamentTV-Data-DE.git"
+
+    # Stage selection for jobs (explicit on purpose — auto-defaulting from
+    # supported_stages would presumptuously enable e.g. ner without the
+    # NER_API_ENDPOINT being set).
+    stages:
+      download: true
+      parse: true
+      merge: true
+      nel: true
+      align: true
+      ner: false  # Requires NER_API_ENDPOINT
+
+    # ─── Optional overrides — usually unset ───
+    # enabled: true                              # default true; set false to disable
+    # current_period: 21                         # default: max(periods) from manifest
+    # entity_dump_url: "https://my-fork/..."     # override manifest default for testing
+    # retry_count: 5                             # override manifest default
+    # tools_dir: /custom/path                    # override defaults.tools_dir
+    # data_dir: /custom/path/to/Data-DE          # override <data_root>/...-DE convention
+    # cache_dir: /custom/cache/dir               # default: <data_dir>/cache
+
+  # ═══════════════════════════════════════════════════════════
+  # Future: German Landtage
+  # ═══════════════════════════════════════════════════════════
+
+  # DE-RP:
+  #   git_remote: "git@github.com:OpenParliamentTV/OpenParliamentTV-Data-DE-RP.git"
+  #   stages:
+  #     download: true
+  #     parse: true
+  #     merge: true
+  #     nel: true
+  #     align: true
+  #     ner: false
+
+  # ═══════════════════════════════════════════════════════════
+  # Future: International Parliaments
+  # ═══════════════════════════════════════════════════════════
+
+  # SE:
+  #   git_remote: "git@github.com:OpenParliamentTV/OpenParliamentTV-Data-SE.git"
+  #   stages:
+  #     download: true
+  #     parse: true
+  #     merge: true
+  #     nel: true
+  #     align: false  # RixVox corpus already aligned
+  #     ner: false

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — OpenParliamentTV-Conductor{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <section>
+    <h2 class="text-lg font-semibold mb-2">Current job</h2>
+    <div id="current-job"
+         class="bg-white border border-slate-200 rounded-lg p-4 min-h-[80px]"
+         hx-get="/dashboard/current" hx-trigger="load, every 2s" hx-swap="innerHTML">
+      Loading…
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold mb-2">Parliaments</h2>
+    {% if not cards %}
+    <p class="text-sm text-slate-500">No parliaments configured.</p>
+    {% endif %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {% for c in cards %}
+      <a href="/parliaments/{{ c.id }}"
+         class="block bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-sm transition">
+        <div class="flex items-baseline justify-between mb-2">
+          <h3 class="text-lg font-semibold">{{ c.name }}</h3>
+          <span class="text-xs text-slate-500">{{ c.id }} · {{ c.language }}</span>
+        </div>
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <dt class="text-slate-500">Periods</dt>
+          <dd>{{ c.periods|length }} (current {{ c.current_period }})</dd>
+          <dt class="text-slate-500">Sessions</dt>
+          <dd>{{ c.session_count }}</dd>
+          <dt class="text-slate-500">Schedules</dt>
+          <dd>{{ c.active_schedules }}</dd>
+          <dt class="text-slate-500">Last job</dt>
+          <dd>
+            {% if c.last_job %}
+              <span class="text-xs">{{ c.last_job.status }} · {{ (c.last_job.finished_at or "")[:10] }}</span>
+            {% else %}
+              <span class="text-slate-400">—</span>
+            {% endif %}
+          </dd>
+        </dl>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section>
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">Recent activity</h2>
+    </div>
+    <div id="recent-jobs"
+         class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100"
+         hx-get="/dashboard/recent" hx-trigger="load, every 5s, refresh"
+         hx-swap="innerHTML">
+      Loading…
+    </div>
+  </section>
+</div>
+{% endblock %}

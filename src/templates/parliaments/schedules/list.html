@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Schedules — {{ parliament.name }}{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <h2 class="text-lg font-semibold">Schedules</h2>
+  <p class="text-sm text-slate-600">
+    Defined in <code class="bg-slate-100 px-1 rounded">config/schedules.yaml</code>.
+    Changes to the file are picked up automatically. Use the toggle to enable/disable
+    or the trigger button to run a schedule immediately.
+  </p>
+
+  <div id="schedule-list"
+       class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100"
+       hx-get="/parliaments/{{ parliament.id }}/schedules/list"
+       hx-trigger="load, every 30s" hx-swap="innerHTML">
+    Loading…
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: openparliamenttv-conductor
+    restart: unless-stopped
+    env_file:
+      - ./config/secrets.env
+    environment:
+      - CONFIG_DIR=/app/config
+      - STATUS_DIR=/app/status
+      - DATA_DIR=/data
+    volumes:
+      # Single data mount (Tools + Data repos)
+      - ./data:/data
+
+      # Configuration (read-only)
+      - ./config:/app/config:ro
+
+      # Runtime state (read-write)
+      - ./status:/app/status
+
+      # Application logs
+      - ./logs:/app/logs
+
+      # SSH keys for git pull/push (read-only). Default: dedicated per-deployment
+      # key under ./config/ssh (created by setup.sh). Override SSH_KEY_DIR in
+      # config/secrets.env if you want to point at e.g. ~/.ssh.
+      - ${SSH_KEY_DIR:-./config/ssh}:/root/.ssh:ro
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Production: Nginx reverse proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: optv-nginx
+    restart: unless-stopped
+    profiles: [production]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+
+  # Optional: Entity-fishing for NER (requires 8GB+ RAM)
+  entity-fishing:
+    image: grobid/entity-fishing:0.0.6
+    container_name: optv-entity-fishing
+    restart: unless-stopped
+    profiles: [ner]
+    ports:
+      - "8090:8090"
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 6G

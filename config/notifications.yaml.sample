@@ -1,0 +1,21 @@
+# Slack Notifications
+#
+# SETUP: cp notifications.yaml.sample notifications.yaml
+#
+# Create webhook at: https://api.slack.com/messaging/webhooks
+# 1. Go to https://api.slack.com/apps
+# 2. Create New App → From scratch
+# 3. Add feature: Incoming Webhooks → Activate
+# 4. Add New Webhook to Workspace → Select channel
+# 5. Copy webhook URL to secrets.env
+
+slack:
+  enabled: true
+
+  # When to notify
+  on_failure: true           # Job failed completely
+  on_partial_failure: true   # Some sessions failed
+  on_success: false          # Job completed successfully (noisy)
+
+  # Optional: only notify for scheduled jobs (not manual)
+  scheduled_only: false

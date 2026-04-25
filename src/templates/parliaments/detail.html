@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ overview.name }} — OpenParliamentTV-Conductor{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-baseline justify-between">
+    <h1 class="text-xl font-semibold">{{ overview.name }}</h1>
+    <div class="text-sm text-slate-500 flex items-center gap-3">
+      <span>{{ overview.id }} · {{ overview.language }}</span>
+      {% if overview.git_repo_url %}
+      <a href="{{ overview.git_repo_url }}" target="_blank" rel="noopener"
+         class="text-blue-600 hover:underline">Data repo ↗</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <section>
+    <h2 class="text-sm font-semibold text-slate-700 mb-2">Current job</h2>
+    <div id="parliament-current-job"
+         class="bg-white border border-slate-200 rounded-lg p-4 min-h-[80px]"
+         hx-get="/parliaments/{{ overview.id }}/jobs/fragments/current"
+         hx-trigger="load, every 2s" hx-swap="innerHTML">
+      Loading…
+    </div>
+  </section>
+
+  <section class="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <a href="/parliaments/{{ overview.id }}/sessions"
+       class="bg-white border border-slate-200 rounded-lg p-3 hover:border-blue-400 hover:shadow-sm transition">
+      <div class="text-xs text-slate-500">Sessions</div>
+      <div class="text-2xl font-semibold text-blue-700">{{ overview.session_count }}</div>
+    </a>
+    <div class="bg-white border border-slate-200 rounded-lg p-3">
+      <div class="text-xs text-slate-500">Periods</div>
+      <div class="text-2xl font-semibold">{{ overview.periods|length }}</div>
+      <div class="text-[10px] text-slate-400 mt-1">current {{ overview.current_period }}</div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-lg p-3">
+      <div class="text-xs text-slate-500">Schedules</div>
+      <div class="text-2xl font-semibold">{{ overview.active_schedules }}</div>
+      {% if overview.last_job %}
+      <div class="text-[10px] text-slate-400 mt-1">last: {{ overview.last_job.status }}</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-sm font-semibold text-slate-700 mb-2">Date range</h2>
+    <div class="text-sm">
+      {% if overview.date_start %}{{ overview.date_start[:10] }}{% else %}—{% endif %}
+      →
+      {% if overview.date_end %}{{ overview.date_end[:10] }}{% else %}—{% endif %}
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-sm font-semibold text-slate-700 mb-2">Electoral periods</h2>
+    <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-600">
+          <tr>
+            <th class="text-left px-3 py-2">Period</th>
+            <th class="text-right px-3 py-2">Sessions</th>
+            <th class="text-left px-3 py-2">From</th>
+            <th class="text-left px-3 py-2">To</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for ps in overview.period_stats %}
+          <tr class="hover:bg-slate-50">
+            <td class="px-3 py-2">
+              <a href="/parliaments/{{ overview.id }}/sessions?period={{ ps.period }}"
+                 class="text-blue-700 hover:underline">{{ ps.period }}</a>{% if ps.period == overview.current_period %} <span class="text-xs text-blue-600">(current)</span>{% endif %}
+            </td>
+            <td class="px-3 py-2 text-right">
+              <a href="/parliaments/{{ overview.id }}/sessions?period={{ ps.period }}"
+                 class="text-blue-700 hover:underline">{{ ps.session_count }}</a>
+            </td>
+            <td class="px-3 py-2 text-xs">{% if ps.date_start %}{{ ps.date_start[:10] }}{% else %}—{% endif %}</td>
+            <td class="px-3 py-2 text-xs">{% if ps.date_end %}{{ ps.date_end[:10] }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if user.role in ("editor", "admin") %}
+  <section x-data="{ show: false }">
+    <div class="bg-white border border-slate-200 rounded-lg p-4">
+      <div class="flex items-baseline justify-between mb-1">
+        <h2 class="text-sm font-semibold text-slate-700">Workflow update</h2>
+        <span class="text-xs text-slate-500">period {{ overview.current_period }}</span>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">
+        Discover and download new sessions from the upstream source, then merge,
+        link entities (NEL) and time-align. Equivalent to the legacy
+        <code class="font-mono">optv update</code>.
+      </p>
+      <button type="button"
+              class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded"
+              @click="show = true">
+        Run update
+      </button>
+    </div>
+
+    <div x-show="show" x-cloak
+         class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+         @keydown.escape.window="show = false">
+      <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold mb-2">Run workflow update</h3>
+        <p class="text-sm text-slate-600 mb-3">
+          Queues a job for period {{ overview.current_period }} with stages
+          <span class="font-mono">download, parse, merge, nel, align</span>.
+        </p>
+        <form hx-post="/parliaments/{{ overview.id }}/run-update"
+              hx-swap="none"
+              @htmx:after-request="show = false">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="force" value="1" />
+            force (re-process sessions even if outputs already exist)
+          </label>
+          <label class="flex items-center gap-2 text-sm mt-2">
+            <input type="checkbox" name="publish" value="1" />
+            publish on success (git commit + push to Data repo)
+          </label>
+          <div class="flex justify-end gap-2 mt-4">
+            <button type="button" class="px-3 py-1 rounded border"
+                    @click="show = false">Cancel</button>
+            <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Queue job</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

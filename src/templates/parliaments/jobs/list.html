@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Jobs — {{ parliament.name }}{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <section>
+    <h2 class="text-lg font-semibold mb-2">Current</h2>
+    <div id="current-job" class="bg-white border border-slate-200 rounded-lg p-4 min-h-[64px]"
+         hx-get="/parliaments/{{ parliament.id }}/jobs/fragments/current"
+         hx-trigger="load, every 2s" hx-swap="innerHTML">
+      Loading…
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold mb-2">Queue</h2>
+    <div class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100"
+         hx-get="/parliaments/{{ parliament.id }}/jobs/fragments/queue"
+         hx-trigger="load, every 5s" hx-swap="innerHTML">
+      Loading…
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold mb-2">History</h2>
+    <div class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100"
+         hx-get="/parliaments/{{ parliament.id }}/jobs/fragments/recent?limit=50"
+         hx-trigger="load, every 10s" hx-swap="innerHTML">
+      Loading…
+    </div>
+  </section>
+</div>
+{% endblock %}

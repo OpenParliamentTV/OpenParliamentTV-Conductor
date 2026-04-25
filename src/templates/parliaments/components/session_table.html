@@ -1,0 +1,57 @@
+{% set stage_list = ["download","parse","merge","nel","align","ner"] %}
+{% if is_initial %}
+<table class="w-full text-sm">
+  <thead class="bg-slate-50 text-xs text-slate-600">
+    <tr>
+      <th class="w-10 px-3 py-2"></th>
+      <th class="text-left px-3 py-2">Session</th>
+      <th class="text-left px-3 py-2">Date</th>
+      {% for s in stage_list %}
+      <th class="text-center px-2 py-2">{{ s }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-slate-100" id="session-rows">
+{% endif %}
+    {% for row in rows %}
+    <tr>
+      <td class="px-3 py-2 text-center">
+        <input type="checkbox" :value="'{{ row.id }}'" x-model="selected" />
+      </td>
+      <td class="px-3 py-2 font-mono">
+        <a href="/parliaments/{{ parliament.id }}/sessions/{{ row.id }}"
+           class="text-blue-700 hover:underline">{{ row.id }}</a>
+      </td>
+      <td class="px-3 py-2 text-xs text-slate-600">
+        {% if row.date_start %}{{ row.date_start[:10] }}{% else %}—{% endif %}
+      </td>
+      {% for s in stage_list %}
+      {% set st = row.status.get(s, 'never_run') %}
+      <td class="px-2 py-2 text-center">
+        <span class="inline-block px-2 py-0.5 rounded text-[11px]
+          {% if st == 'complete' %}bg-green-100 text-green-800
+          {% else %}bg-slate-50 text-slate-300{% endif %}">
+          {% if st == 'complete' %}&#10003;{% else %}&ndash;{% endif %}
+        </span>
+      </td>
+      {% endfor %}
+    </tr>
+    {% else %}
+    {% if is_initial %}
+    <tr><td colspan="9" class="px-3 py-4 text-center text-slate-500">No sessions match.</td></tr>
+    {% endif %}
+    {% endfor %}
+
+    {% if has_more %}
+    <tr hx-get="/parliaments/{{ parliament.id }}/sessions/list?period={{ period }}&offset={{ offset + limit }}&limit={{ limit }}"
+        hx-trigger="revealed"
+        hx-swap="outerHTML"
+        hx-include="[name='filter'], [name='date_from'], [name='date_to']">
+      <td colspan="9" class="px-3 py-3 text-center text-xs text-slate-400">Loading more…</td>
+    </tr>
+    {% endif %}
+
+{% if is_initial %}
+  </tbody>
+</table>
+{% endif %}

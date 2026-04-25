@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Sign in — OpenParliamentTV-Conductor{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto mt-24 bg-white border border-slate-200 rounded-lg shadow-sm p-8 text-center">
+  <h1 class="text-2xl font-semibold mb-2">OpenParliamentTV-Conductor</h1>
+  <p class="text-slate-600 mb-6">Sign in with GitHub to continue.</p>
+  {% if error %}<p class="text-red-600 text-sm mb-4">{{ error }}</p>{% endif %}
+  <a href="/auth/login"
+     class="inline-flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded hover:bg-slate-700">
+    Sign in with GitHub
+  </a>
+</div>
+{% endblock %}

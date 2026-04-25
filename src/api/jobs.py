@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from src.auth.dependencies import require_role
+from src.config import AppConfig, get_config
+from src.services.job_manager import Job, JobManager
+from src.services.log_streamer import LogStreamer
+from src.services.registry import get_job_manager, get_log_streamer
+
+router = APIRouter(prefix="/api/parliaments/{parliament_id}/jobs", tags=["jobs"])
+
+
+class JobCreate(BaseModel):
+    period: int | None = None
+    stages: list[str] = Field(..., min_length=1)
+    session_filter: str | None = None
+    force: bool = False
+    publish_on_success: bool = False
+
+
+def _parliament_jobs(jm: JobManager, parliament_id: str, include_queue: bool, limit: int) -> dict:
+    current = jm.current()
+    out: dict = {}
+    if current and current.parliament == parliament_id:
+        out["current"] = current.to_dict()
+    else:
+        out["current"] = None
+    if include_queue:
+        out["queue"] = [j for j in jm.list_queue() if j.get("parliament") == parliament_id]
+    out["recent"] = [j for j in jm.list_history(limit=limit * 3) if j.get("parliament") == parliament_id][:limit]
+    return out
+
+
+@router.post("")
+async def create_job(
+    parliament_id: str,
+    payload: JobCreate,
+    config: AppConfig = Depends(get_config),
+    jm: JobManager = Depends(get_job_manager),
+    user: dict = Depends(require_role("editor")),
+) -> dict:
+    if parliament_id not in config.parliaments:
+        raise HTTPException(status_code=404, detail=f"Unknown parliament {parliament_id}")
+    valid = {"download", "parse", "merge", "nel", "align", "ner", "publish"}
+    bad = [s for s in payload.stages if s not in valid]
+    if bad:
+        raise HTTPException(status_code=400, detail=f"Unknown stages: {bad}")
+    job = Job.new(
+        parliament=parliament_id,
+        stages=payload.stages,
+        period=payload.period,
+        session_filter=payload.session_filter,
+        force=payload.force,
+        publish_on_success=payload.publish_on_success,
+        source="manual",
+    )
+    position = jm.enqueue(job)
+    return {"job_id": job.id, "position": position}
+
+
+@router.get("")
+async def list_jobs(
+    parliament_id: str,
+    limit: int = 20,
+    config: AppConfig = Depends(get_config),
+    jm: JobManager = Depends(get_job_manager),
+    _user: dict = Depends(require_role("viewer")),
+) -> dict:
+    if parliament_id not in config.parliaments:
+        raise HTTPException(status_code=404, detail=f"Unknown parliament {parliament_id}")
+    return _parliament_jobs(jm, parliament_id, include_queue=True, limit=limit)
+
+
+@router.get("/current")
+async def get_current(
+    parliament_id: str,
+    jm: JobManager = Depends(get_job_manager),
+    _user: dict = Depends(require_role("viewer")),
+) -> dict:
+    current = jm.current()
+    if current and current.parliament == parliament_id:
+        return current.to_dict()
+    return {}
+
+
+@router.get("/{job_id}")
+async def get_job(
+    parliament_id: str,
+    job_id: str,
+    jm: JobManager = Depends(get_job_manager),
+    _user: dict = Depends(require_role("viewer")),
+) -> dict:
+    job = jm.get(job_id)
+    if not job or job.get("parliament") != parliament_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@router.post("/{job_id}/cancel")
+async def cancel_job(
+    parliament_id: str,
+    job_id: str,
+    jm: JobManager = Depends(get_job_manager),
+    _user: dict = Depends(require_role("editor")),
+) -> dict:
+    job = jm.get(job_id)
+    if not job or job.get("parliament") != parliament_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    cancelled_immediately = jm.cancel(job_id)
+    return {"cancelled": True, "immediate": cancelled_immediately}
+
+
+@router.get("/{job_id}/logs")
+async def get_job_logs(
+    parliament_id: str,
+    job_id: str,
+    streamer: LogStreamer = Depends(get_log_streamer),
+    jm: JobManager = Depends(get_job_manager),
+    _user: dict = Depends(require_role("viewer")),
+) -> dict:
+    job = jm.get(job_id)
+    if not job or job.get("parliament") != parliament_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"logs": streamer.read(job_id)}

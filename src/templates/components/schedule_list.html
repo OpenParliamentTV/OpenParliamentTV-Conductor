@@ -1,0 +1,36 @@
+{% for s in schedules %}
+<div class="flex items-center justify-between px-4 py-3">
+  <div class="min-w-0">
+    <div class="font-medium text-sm">
+      {{ s.id }}
+      <span class="text-xs text-slate-500 ml-2">{{ s.parliament }}</span>
+    </div>
+    <div class="text-xs text-slate-500 font-mono">
+      {{ s.cron }} · {{ s.stages | join(", ") }}
+      {% if s.publish_on_success %} · publish{% endif %}
+    </div>
+    {% if s.description %}<div class="text-xs text-slate-600 mt-1">{{ s.description }}</div>{% endif %}
+    {% if s.next_run %}<div class="text-xs text-slate-500">next: {{ s.next_run }}</div>{% endif %}
+  </div>
+  <div class="flex items-center gap-3">
+    {% if s.enabled %}
+    <button class="text-xs text-blue-600 hover:underline"
+            hx-post="/api/parliaments/{{ s.parliament }}/schedules/{{ s.id }}/trigger"
+            hx-swap="none">run now</button>
+    {% endif %}
+    <button class="text-xs px-3 py-1 rounded border
+              {% if s.enabled %}border-green-600 text-green-700 bg-green-50
+              {% else %}border-slate-300 text-slate-600{% endif %}"
+            hx-post="/api/parliaments/{{ s.parliament }}/schedules/{{ s.id }}/enable"
+            hx-ext="json-enc"
+            hx-vals='{"enabled": {{ (not s.enabled) | tojson }} }'
+            hx-target="#schedule-list"
+            hx-swap="none"
+            hx-on::after-request="htmx.ajax('GET','/parliaments/{{ s.parliament }}/schedules/list','#schedule-list')">
+      {% if s.enabled %}enabled{% else %}disabled{% endif %}
+    </button>
+  </div>
+</div>
+{% else %}
+<div class="px-4 py-3 text-sm text-slate-500">No schedules defined.</div>
+{% endfor %}

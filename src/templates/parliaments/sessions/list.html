@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Sessions — {{ parliament.name }}{% endblock %}
+{% block content %}
+<div x-data="{
+       selected: [], showBulk: false, showDateRerun: false,
+       syncUrl() {
+         const root = this.$root;
+         const get = (name) => (root.querySelector('[name=\'' + name + '\']') || {}).value || '';
+         const params = new URLSearchParams();
+         const period = get('period');
+         const filter = get('filter');
+         const date_from = get('date_from');
+         const date_to = get('date_to');
+         if (period) params.set('period', period);
+         if (filter) params.set('filter', filter);
+         if (date_from) params.set('date_from', date_from);
+         if (date_to) params.set('date_to', date_to);
+         const qs = params.toString();
+         history.replaceState({}, '', location.pathname + (qs ? '?' + qs : ''));
+       }
+     }"
+     class="space-y-4">
+  <div class="flex flex-wrap items-end gap-3">
+    <div>
+      <label class="block text-xs text-slate-600">Period</label>
+      <select name="period" class="border rounded px-2 py-1"
+              @change="syncUrl()"
+              hx-get="/parliaments/{{ parliament.id }}/sessions/list"
+              hx-trigger="change" hx-target="#session-table"
+              hx-include="[name='filter'], [name='date_from'], [name='date_to']">
+        <option value="" {% if selected_period == "" %}selected{% endif %}>all</option>
+        {% for p in periods %}
+        <option value="{{ p }}" {% if p == selected_period %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="flex-1 min-w-[240px]">
+      <label class="block text-xs text-slate-600">Filter (regex on session id)</label>
+      <input name="filter" type="text"
+             value="{{ initial_filter }}"
+             class="border rounded px-2 py-1 w-full"
+             placeholder="e.g. 2104[5-9]"
+             @input.debounce.400ms="syncUrl()"
+             hx-get="/parliaments/{{ parliament.id }}/sessions/list"
+             hx-trigger="keyup changed delay:400ms"
+             hx-target="#session-table"
+             hx-include="[name='period'], [name='date_from'], [name='date_to']">
+    </div>
+    <div>
+      <label class="block text-xs text-slate-600">From</label>
+      <input name="date_from" type="date"
+             value="{{ initial_date_from }}"
+             class="border rounded px-2 py-1"
+             @change="syncUrl()"
+             hx-get="/parliaments/{{ parliament.id }}/sessions/list"
+             hx-trigger="change" hx-target="#session-table"
+             hx-include="[name='period'], [name='filter'], [name='date_to']">
+    </div>
+    <div>
+      <label class="block text-xs text-slate-600">To</label>
+      <input name="date_to" type="date"
+             value="{{ initial_date_to }}"
+             class="border rounded px-2 py-1"
+             @change="syncUrl()"
+             hx-get="/parliaments/{{ parliament.id }}/sessions/list"
+             hx-trigger="change" hx-target="#session-table"
+             hx-include="[name='period'], [name='filter'], [name='date_from']">
+    </div>
+    <button type="button"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
+            x-bind:disabled="selected.length === 0"
+            x-bind:class="selected.length === 0 ? 'opacity-50 cursor-not-allowed' : ''"
+            @click="showBulk = true">
+      Re-run selected (<span x-text="selected.length"></span>)
+    </button>
+    <button type="button"
+            class="bg-white border border-slate-300 hover:border-slate-400 px-3 py-2 rounded text-sm"
+            @click="showDateRerun = true">
+      Re-run date range
+    </button>
+  </div>
+
+  <div id="session-table"
+       class="bg-white border border-slate-200 rounded-lg overflow-hidden"
+       hx-get="/parliaments/{{ parliament.id }}/sessions/list"
+       hx-trigger="load"
+       hx-include="[name='period'], [name='filter'], [name='date_from'], [name='date_to']">
+    Loading…
+  </div>
+
+  {# Selected sessions rerun modal #}
+  <div x-show="showBulk" x-cloak
+       class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+       @keydown.escape.window="showBulk = false">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+      <h3 class="text-lg font-semibold mb-2">Re-run stages</h3>
+      <p class="text-sm text-slate-600 mb-3">
+        <span x-text="selected.length"></span> session(s) selected.
+      </p>
+      <form hx-post="/parliaments/{{ parliament.id }}/sessions/bulk-rerun"
+            hx-swap="none"
+            @htmx:after-request="showBulk = false; selected = []">
+        <input type="hidden" name="ids" x-bind:value="selected.join(',')" />
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          {% for s in ["download","parse","merge","nel","align","ner"] %}
+          <label class="flex items-center gap-2">
+            <input type="checkbox" name="stages" value="{{ s }}" /> {{ s }}
+          </label>
+          {% endfor %}
+        </div>
+        <label class="flex items-center gap-2 mt-3 text-sm">
+          <input type="checkbox" name="force" value="1" /> force (ignore existing outputs)
+        </label>
+        <div class="flex justify-end gap-2 mt-4">
+          <button type="button" class="px-3 py-1 rounded border" @click="showBulk = false">Cancel</button>
+          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Re-run</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# Date-range rerun modal #}
+  <div x-show="showDateRerun" x-cloak
+       class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+       @keydown.escape.window="showDateRerun = false">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+      <h3 class="text-lg font-semibold mb-2">Re-run by date range</h3>
+      <form hx-post="/parliaments/{{ parliament.id }}/sessions/bulk-rerun-by-date"
+            hx-swap="none"
+            @htmx:after-request="showDateRerun = false">
+        <input type="hidden" name="period" value="{{ selected_period }}" />
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="block text-xs text-slate-600">From</label>
+            <input type="date" name="date_from" class="border rounded px-2 py-1 w-full" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600">To</label>
+            <input type="date" name="date_to" class="border rounded px-2 py-1 w-full" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          {% for s in ["download","parse","merge","nel","align","ner"] %}
+          <label class="flex items-center gap-2">
+            <input type="checkbox" name="stages" value="{{ s }}" /> {{ s }}
+          </label>
+          {% endfor %}
+        </div>
+        <label class="flex items-center gap-2 mt-3 text-sm">
+          <input type="checkbox" name="force" value="1" /> force (ignore existing outputs)
+        </label>
+        <div class="flex justify-end gap-2 mt-4">
+          <button type="button" class="px-3 py-1 rounded border" @click="showDateRerun = false">Cancel</button>
+          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Re-run</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

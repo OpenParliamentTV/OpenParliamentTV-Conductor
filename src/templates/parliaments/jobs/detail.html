@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.id[:8] }} — {{ parliament.name }}{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-lg font-semibold">
+        {{ job.parliament }} · {{ job.stages | join(" → ") }}
+      </h2>
+      <div class="text-xs text-slate-500 font-mono">{{ job.id }}</div>
+    </div>
+    <a href="/parliaments/{{ parliament.id }}/jobs"
+       class="text-sm text-blue-600 hover:underline">← all jobs</a>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-lg p-4"
+       hx-get="/dashboard/job/{{ job.id }}" hx-trigger="load, every 2s" hx-swap="innerHTML">
+    Loading…
+  </div>
+
+  <div>
+    <h3 class="text-sm font-semibold text-slate-700 mb-1">Logs</h3>
+    <pre id="logs" class="bg-slate-900 text-slate-100 text-xs font-mono rounded-lg p-3 h-[480px] overflow-y-auto whitespace-pre-wrap"></pre>
+  </div>
+</div>
+<script>
+  (function() {
+    const pre = document.getElementById('logs');
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(proto + '//' + location.host + '/ws/logs/{{ job.id }}');
+    ws.onmessage = function(ev) {
+      const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+      pre.textContent += ev.data + '\n';
+      if (atBottom) pre.scrollTop = pre.scrollHeight;
+    };
+    ws.onclose = function() {
+      pre.textContent += '\n[connection closed]\n';
+    };
+  })();
+</script>
+{% endblock %}

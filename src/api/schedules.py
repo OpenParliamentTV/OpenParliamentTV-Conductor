@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+import yaml
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+
+from src.auth.dependencies import require_role
+from src.config import AppConfig, get_config
+from src.services.registry import registry
+
+router = APIRouter(prefix="/api/parliaments/{parliament_id}/schedules", tags=["schedules"])
+
+
+class EnableBody(BaseModel):
+    enabled: bool
+
+
+@router.get("")
+async def list_schedules(
+    parliament_id: str,
+    config: AppConfig = Depends(get_config),
+    _user: dict = Depends(require_role("viewer")),
+) -> dict:
+    if parliament_id not in config.parliaments:
+        raise HTTPException(status_code=404, detail=f"Unknown parliament {parliament_id}")
+    next_runs = registry.scheduler.next_run_times() if registry.scheduler else {}
+    return {
+        "schedules": [
+            {
+                "id": sid,
+                "enabled": sched.enabled,
+                "parliament": sched.parliament,
+                "cron": sched.cron,
+                "stages": sched.stages,
+                "description": sched.description,
+                "publish_on_success": sched.publish_on_success,
+                "next_run": next_runs.get(sid),
+            }
+            for sid, sched in config.schedules.items()
+            if sched.parliament == parliament_id
+        ]
+    }
+
+
+def _rewrite_schedules_file(config: AppConfig) -> None:
+    """Serialize the current in-memory schedules back into schedules.yaml."""
+    data = {
+        "schedules": {
+            sid: sched.model_dump(exclude_none=True) for sid, sched in config.schedules.items()
+        }
+    }
+    path = config.config_dir / "schedules.yaml"
+    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+
+@router.post("/{schedule_id}/enable")
+async def enable_schedule(
+    parliament_id: str,
+    schedule_id: str,
+    body: EnableBody,
+    config: AppConfig = Depends(get_config),
+    _user: dict = Depends(require_role("admin")),
+) -> dict:
+    sched = config.schedules.get(schedule_id)
+    if not sched or sched.parliament != parliament_id:
+        raise HTTPException(status_code=404, detail="Unknown schedule")
+    sched.enabled = body.enabled
+    _rewrite_schedules_file(config)
+    if registry.scheduler:
+        registry.scheduler.sync_jobs()
+    return {"id": schedule_id, "enabled": sched.enabled}
+
+
+@router.post("/{schedule_id}/trigger")
+async def trigger_schedule(
+    parliament_id: str,
+    schedule_id: str,
+    config: AppConfig = Depends(get_config),
+    _user: dict = Depends(require_role("editor")),
+) -> dict:
+    sched = config.schedules.get(schedule_id)
+    if not sched or sched.parliament != parliament_id:
+        raise HTTPException(status_code=404, detail="Unknown schedule")
+    if not registry.scheduler or not registry.scheduler.trigger_now(schedule_id):
+        raise HTTPException(status_code=404, detail="Unknown schedule")
+    return {"triggered": schedule_id}

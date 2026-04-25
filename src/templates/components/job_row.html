@@ -1,0 +1,25 @@
+{% for job in jobs %}
+<a href="/parliaments/{{ job.parliament }}/jobs/{{ job.id }}"
+   class="flex items-center justify-between px-4 py-2 hover:bg-slate-50">
+  <div class="min-w-0">
+    <div class="font-medium text-sm truncate">
+      {{ job.parliament }} · {{ job.stages | join(" → ") }}
+    </div>
+    <div class="text-xs text-slate-500">
+      {{ job.id[:8] }} · {{ job.source }}{% if job.schedule_id %} ({{ job.schedule_id }}){% endif %}
+      · {{ job.finished_at or job.started_at or job.created_at }}
+    </div>
+  </div>
+  <span class="text-xs px-2 py-1 rounded ml-3
+    {% if job.status == 'running' %}bg-blue-100 text-blue-800
+    {% elif job.status == 'success' %}bg-green-100 text-green-800
+    {% elif job.status == 'failed' %}bg-red-100 text-red-800
+    {% elif job.status == 'partial' %}bg-amber-100 text-amber-800
+    {% elif job.status == 'cancelled' %}bg-slate-200 text-slate-700
+    {% else %}bg-slate-100 text-slate-700{% endif %}">
+    {{ job.status }}
+  </span>
+</a>
+{% else %}
+<div class="px-4 py-3 text-sm text-slate-500">No jobs yet.</div>
+{% endfor %}
