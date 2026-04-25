@@ -11,15 +11,17 @@ OpenParliamentTV-*/
 .directory
 
 # Logs
-logs
+logs/
 _logs/
 *.log
+!logs/.gitkeep
 
 # Runtime data
 pids
 *.pid
 *.seed
 .idea/
+_planning/
 
 # Media files
 *.m4v
@@ -29,3 +31,46 @@ pids
 *.mpg
 *.mp3
 
+# ===================
+# Configuration (real files, not samples)
+# ===================
+config/secrets.env
+config/parliaments.yaml
+config/users.yaml
+config/schedules.yaml
+config/notifications.yaml
+config/ssh/
+
+# ===================
+# SSL Certificates
+# ===================
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+!nginx/ssl/.gitkeep
+
+# ===================
+# Runtime State
+# ===================
+status/
+!status/.gitkeep
+
+# ===================
+# Data Directory (single mount)
+# ===================
+data/
+
+# ===================
+# Local Docker overrides
+# ===================
+docker-compose.override.yml
+
+# ===================
+# Python
+# ===================
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
