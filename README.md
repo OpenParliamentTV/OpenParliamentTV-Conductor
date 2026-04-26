@@ -1,4 +1,4 @@
-# OpenParliamentTV-Conductor
+# Open Parliament TV - Conductor
 
 FastAPI + HTMX web app that orchestrates the per-parliament tooling
 (currently DE) — queues and runs download/parse/merge/NEL/alignment/NER jobs,
