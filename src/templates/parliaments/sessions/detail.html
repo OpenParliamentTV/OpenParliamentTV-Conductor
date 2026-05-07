@@ -100,8 +100,8 @@
                   {% set lmc = speech.status.linked_media_count %}
                   {% if speech.status.importable %}
                     <span class="inline-block px-2 py-0.5 rounded text-[11px] bg-green-100 text-green-800"
-                          title="{% if c is none %}merge has not run — media-only record, still imported{% else %}confidence {{ c }} · 1 linked media — text is imported{% endif %}">
-                      {% if c is none %}no conf (media only){% else %}conf {{ "%g"|format(c) }}{% endif %}
+                          title="{% if c is none %}{% if speech.status.has_text %}text directly linked to media — no confidence score needed{% else %}merge has not run — media-only record, still imported{% endif %}{% else %}confidence {{ c }} · 1 linked media — text is imported{% endif %}">
+                      {% if c is none %}{% if speech.status.has_text %}direct{% else %}media only{% endif %}{% else %}conf {{ "%g"|format(c) }}{% endif %}
                     </span>
                   {% else %}
                     <span class="inline-block px-2 py-0.5 rounded text-[11px] bg-red-100 text-red-800"

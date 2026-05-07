@@ -199,7 +199,9 @@ class SessionContentService:
             text_body = []
             for tc in speech.get("textContents") or []:
                 for b in tc.get("textBody") or []:
-                    chunk = b.get("text")
+                    chunk = b.get("text") or " ".join(
+                        s.get("text", "") for s in b.get("sentences") or [] if s.get("text")
+                    )
                     if chunk:
                         text_body.append(chunk)
             full_text = " ".join(text_body).strip()
@@ -239,7 +241,9 @@ class SessionContentService:
                     for b in tc.get("textBody") or []:
                         text_parts.append({
                             "speaker": (b.get("speaker") or ""),
-                            "text": (b.get("text") or ""),
+                            "text": b.get("text") or " ".join(
+                                s.get("text", "") for s in b.get("sentences") or [] if s.get("text")
+                            ),
                             "type": (b.get("type") or ""),
                         })
                 media = speech.get("media") or {}
@@ -418,10 +422,15 @@ class SessionContentService:
         debug = speech.get("debug") or {}
         confidence = debug.get("confidence")
         linked_count = len(debug.get("linkedMediaIndexes") or [])
+        has_text = any(
+            bool(tc.get("textBody"))
+            for tc in (speech.get("textContents") or [])
+        )
         return {
             "aligned": bool(debug.get("align-duration")),
             "confidence": confidence,
             "linked_media_count": linked_count,
+            "has_text": has_text,
             "importable": confidence is None or (confidence == 1 and linked_count == 1),
         }
 
