@@ -81,7 +81,7 @@ def _write_fake_workflow_script(tools_dir: Path) -> None:
         parser.add_argument("--ner-api-endpoint", default="")
         parser.add_argument("--align-timeout", type=int, default=1200)
         parser.add_argument("--align-max-audio-seconds", type=int, default=2400)
-        parser.add_argument("--limit-to-period", action="store_true")
+        parser.add_argument("--limit-to-period", action=argparse.BooleanOptionalAction, default=True)
         parser.add_argument("--no-single-instance", action="store_true")
         parser.add_argument("--force", action="store_true")
         parser.add_argument("--download-original", action="store_true")
@@ -158,3 +158,28 @@ async def test_runner_streams_logs_and_updates_progress(tmp_path):
     assert completed["sessions_total"] == 3
     assert completed["sessions_completed"] == 3
     assert completed["progress"] == 100
+
+
+def test_build_argv_limit_to_period_depends_on_session_filter(tmp_path):
+    """A session-filtered job must disable the period prefix filter.
+
+    `--limit-to-period` is a DE-only ID convention; when `session_filter`
+    pins exact sessions it is redundant and breaks cross-period reruns.
+    """
+    tools_dir = tmp_path / "tools"
+    data_dir = tmp_path / "data"
+    app_config = _make_app_config(tmp_path, tools_dir, data_dir)
+    parliament = app_config.parliaments["XX"]
+    runner = WorkflowRunner(app_config, JobManager(tmp_path / "status"),
+                            LogStreamer(tmp_path / "status"), notifier=None)
+
+    whole_period = Job.new(parliament="XX", stages=["ner"], period=21)
+    argv = runner._build_argv(whole_period, parliament, ["ner"])
+    assert "--limit-to-period" in argv
+    assert "--no-limit-to-period" not in argv
+
+    targeted = Job.new(parliament="XX", stages=["ner"], period=21,
+                       session_filter="^(20205)$")
+    argv = runner._build_argv(targeted, parliament, ["ner"])
+    assert "--no-limit-to-period" in argv
+    assert "--limit-to-period" not in argv

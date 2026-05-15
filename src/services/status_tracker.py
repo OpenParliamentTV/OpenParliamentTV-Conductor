@@ -48,11 +48,14 @@ class StatusTracker:
     ) -> dict[str, str]:
         """Cheap per-row status for the sessions list.
 
-        Derives each stage from what's authoritatively recorded at the top
-        of the session file: `meta.processing` maps stage name → run
-        timestamp. A 4 KB header read per session, cached 60 s. The
-        `download` stage comes from media file existence because it has
-        no `meta.processing` entry. Returns `{stage: "complete"|"never_run"}`
+        Reads stages from `session_processing_stages`, which combines the
+        explicit `meta.processing` keys with evidence-based fallbacks
+        (debug.align-duration, debug.ner-duration, non-empty data array)
+        so sessions processed by older Tools versions — which wrote sparse
+        meta.processing blocks — still report what actually ran. One
+        16 KB header read per session, cached 60 s. The `download` stage
+        comes from media file existence because it has no
+        `meta.processing` entry. Returns `{stage: "complete"|"never_run"}`
         for download + parse + merge + nel + align + ner.
         """
         key = (parliament_id, session)

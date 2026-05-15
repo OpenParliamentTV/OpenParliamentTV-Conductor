@@ -35,10 +35,19 @@ def _resolve(parliament_id: str, config: AppConfig) -> ParliamentConfig:
     return parliament
 
 
-def _period_for_session(parliament: ParliamentConfig, session_id: str) -> int:
-    for period in parliament.periods:
-        if session_id.startswith(str(period)):
-            return period
+def _period_for_session(parliament_id: str, parliament: ParliamentConfig, session_id: str) -> int:
+    """Return the electoral period for a session.
+
+    Prefers the authoritative `electoralPeriod.number` read from the session
+    file (correct for any ID format). Falls back to the DE-style ID-prefix
+    convention, then `current_period`, when the file is missing or empty.
+    """
+    period = get_session_content().session_period(parliament_id, parliament, session_id)
+    if period is not None:
+        return period
+    for p in parliament.periods:
+        if session_id.startswith(str(p)):
+            return p
     return parliament.current_period
 
 
@@ -114,7 +123,7 @@ async def rerun_session(
     job = Job.new(
         parliament=parliament_id,
         stages=payload.stages,
-        period=_period_for_session(parliament, session_id),
+        period=_period_for_session(parliament_id, parliament, session_id),
         session_filter=f"^{session_id}$",
         force=payload.force,
         source="manual",

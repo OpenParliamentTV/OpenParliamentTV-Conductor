@@ -29,6 +29,14 @@ _META_DATE_RE = re.compile(r'"dateStart"\s*:\s*"([0-9T:+\-]+)"')
 _META_DATE_END_RE = re.compile(r'"dateEnd"\s*:\s*"([0-9T:+\-]+)"')
 _PROCESSING_BLOCK_RE = re.compile(r'"processing"\s*:\s*\{(?P<body>[^{}]*)\}', re.DOTALL)
 _PROCESSING_KEY_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*)"\s*:')
+_DATA_NONEMPTY_RE = re.compile(r'"data"\s*:\s*\[\s*\{')
+# Authoritative electoral period — `data[0].electoralPeriod.number`. This is
+# the source of truth regardless of session-ID format (DE IDs encode the
+# period as a prefix, SE IDs are year-prefixed, etc.). Appears ~byte 350.
+_ELECTORAL_PERIOD_RE = re.compile(r'"electoralPeriod"\s*:\s*\{\s*"number"\s*:\s*(\d+)')
+# 16 KB header read covers evidence signals (debug.align-duration, debug.ner-duration,
+# people[].wid) for typical sessions; the very first speech item usually fits.
+_HEADER_BYTES = 16384
 
 
 def _parliament_config(parliament_id: str, parliament: ParliamentConfig):
@@ -36,7 +44,7 @@ def _parliament_config(parliament_id: str, parliament: ParliamentConfig):
     return module.Config(Path(parliament.data_dir))
 
 
-def _read_header(path: Path, nbytes: int = 4096) -> str:
+def _read_header(path: Path, nbytes: int = _HEADER_BYTES) -> str:
     try:
         with path.open("rb") as fh:
             return fh.read(nbytes).decode("utf-8", errors="replace")
@@ -59,23 +67,51 @@ def _extract_meta_dates(path: Path) -> tuple[str | None, str | None]:
 
 
 def _extract_processing_stages(path: Path) -> set[str]:
-    """Return the set of stage keys listed in `meta.processing`.
+    """Return the set of pipeline stages that have run for this session.
 
-    Each key there (e.g. `parse_media`, `merge`, `nel`, `align`, `ner`)
-    is the name of a pipeline stage that has run at least once on this
-    session; the value is an ISO timestamp. The block sits inside `meta`
-    at the top of the file, so a 4 KB header read is enough.
+    Combines two signals from a single 16 KB header read:
+
+    1. Explicit keys in `meta.processing` (e.g. `parse_media`, `merge`,
+       `nel`, `align`, `ner`) — the canonical record when modern Tools
+       writes it.
+    2. Evidence-based fallbacks for sessions processed by older Tools
+       versions that wrote sparse `meta.processing` blocks. Tools' own
+       `Config.status()` uses these same signals; we mirror them so the
+       Conductor UI agrees with what actually ran:
+         - `debug.align-duration` per item -> align ran (aeneas wrote durations)
+         - `debug.ner-duration` per item   -> ner ran   (entity-fishing wrote durations)
+         - any data item present           -> merge + parse_media + parse_proceedings
+                                              ran (you can't have items otherwise)
     """
     head = _read_header(path)
     if not head:
         return set()
     data_cut = head.find('"data"')
-    if data_cut != -1:
-        head = head[:data_cut]
-    m = _PROCESSING_BLOCK_RE.search(head)
-    if not m:
-        return set()
-    return set(_PROCESSING_KEY_RE.findall(m.group("body")))
+    head_meta = head[:data_cut] if data_cut != -1 else head
+    m = _PROCESSING_BLOCK_RE.search(head_meta)
+    stages = set(_PROCESSING_KEY_RE.findall(m.group("body"))) if m else set()
+
+    if '"align-duration"' in head:
+        stages.add("align")
+    if '"ner-duration"' in head:
+        stages.add("ner")
+    if _DATA_NONEMPTY_RE.search(head):
+        stages.update({"merge", "parse_media", "parse_proceedings"})
+    return stages
+
+
+def _extract_period(path: Path) -> int | None:
+    """Return the authoritative electoral period for a session.
+
+    Reads `data[0].electoralPeriod.number` from the file header — the source
+    of truth, independent of session-ID format. Returns None if absent (e.g.
+    an empty session with no data items).
+    """
+    head = _read_header(path)
+    if not head:
+        return None
+    m = _ELECTORAL_PERIOD_RE.search(head)
+    return int(m.group(1)) if m else None
 
 
 @dataclass
@@ -102,6 +138,7 @@ class SessionContentService:
         self._date_cache: dict[tuple[str, str], tuple[float, str | None]] = {}
         self._period_span_cache: dict[tuple[str, int], tuple[float, tuple[str | None, str | None, int]]] = {}
         self._stages_cache: dict[tuple[str, str], tuple[float, set[str]]] = {}
+        self._period_cache: dict[tuple[str, str], tuple[float, int | None]] = {}
 
     def _load_session(self, parliament_id: str, parliament: ParliamentConfig, session: str) -> dict[str, Any] | None:
         key = (parliament_id, session)
@@ -307,10 +344,13 @@ class SessionContentService:
         parliament: ParliamentConfig,
         session: str,
     ) -> set[str]:
-        """Return the raw stage keys from `meta.processing` for a session.
+        """Return the set of pipeline stages that have run for this session.
 
-        Cheap: a single 4 KB header read per session, cached 60 s. Returns
-        an empty set if the processed session file does not exist.
+        Combines explicit `meta.processing` keys with evidence-based
+        fallbacks (see `_extract_processing_stages`) so old sessions whose
+        Tools version wrote sparse processing blocks still report what
+        actually ran. One 16 KB header read per session, cached 60 s.
+        Returns an empty set if the processed session file does not exist.
         """
         key = (parliament_id, session)
         now = time.time()
@@ -346,6 +386,31 @@ class SessionContentService:
         with self._lock:
             self._date_cache[key] = (time.time(), ds)
         return ds
+
+    def session_period(
+        self,
+        parliament_id: str,
+        parliament: ParliamentConfig,
+        session: str,
+    ) -> int | None:
+        """Return the authoritative electoral period for a session.
+
+        Reads `data[0].electoralPeriod.number` from the file via a cheap
+        header read — correct regardless of session-ID format. Returns None
+        if the file is missing or has no data items. Cached 60 s.
+        """
+        key = (parliament_id, session)
+        now = time.time()
+        with self._lock:
+            cached = self._period_cache.get(key)
+            if cached and now - cached[0] < self._ttl:
+                return cached[1]
+        config = _parliament_config(parliament_id, parliament)
+        path = config.file(session, "processed")
+        period = _extract_period(path) if path.exists() else None
+        with self._lock:
+            self._period_cache[key] = (time.time(), period)
+        return period
 
     def period_date_span(
         self,
@@ -388,6 +453,7 @@ class SessionContentService:
                 self._date_cache.clear()
                 self._period_span_cache.clear()
                 self._stages_cache.clear()
+                self._period_cache.clear()
                 return
             self._session_cache = {
                 k: v for k, v in self._session_cache.items()
@@ -405,6 +471,10 @@ class SessionContentService:
             }
             self._stages_cache = {
                 k: v for k, v in self._stages_cache.items()
+                if not (k[0] == parliament_id and (session is None or k[1] == session))
+            }
+            self._period_cache = {
+                k: v for k, v in self._period_cache.items()
                 if not (k[0] == parliament_id and (session is None or k[1] == session))
             }
 

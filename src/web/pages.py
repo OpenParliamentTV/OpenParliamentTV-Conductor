@@ -275,16 +275,29 @@ async def sessions_bulk_rerun(
     session_ids = [i for i in ids.split(",") if i]
     if not session_ids:
         return Response(status_code=204)
-    escaped = [re.escape(s) for s in session_ids]
-    job = Job.new(
-        parliament=parliament_id,
-        stages=stages,
-        period=p.current_period,
-        session_filter=f"^({'|'.join(escaped)})$",
-        force=bool(force),
-        source="manual",
-    )
-    jm.enqueue(job)
+    # Group selected sessions by electoral period. The runner drops
+    # --limit-to-period for session-filtered jobs, so --period no longer
+    # gates which sessions run — but it's still threaded through for the
+    # download stage and the progress estimate, so derive it correctly.
+    # `session_period` reads the authoritative `electoralPeriod.number`
+    # from each file; the ID-prefix is only a DE-specific fallback.
+    sc = get_session_content()
+    by_period: dict[int, list[str]] = {}
+    for sid in session_ids:
+        period = sc.session_period(parliament_id, p, sid)
+        if period is None:
+            period = next((pp for pp in p.periods if sid.startswith(str(pp))), p.current_period)
+        by_period.setdefault(period, []).append(sid)
+    for period, sids in sorted(by_period.items()):
+        escaped = [re.escape(s) for s in sids]
+        jm.enqueue(Job.new(
+            parliament=parliament_id,
+            stages=stages,
+            period=period,
+            session_filter=f"^({'|'.join(escaped)})$",
+            force=bool(force),
+            source="manual",
+        ))
     return Response(status_code=204)
 
 

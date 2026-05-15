@@ -131,11 +131,15 @@ class WorkflowRunner:
         SessionStatus = module.SessionStatus
 
         sessions = cfg.sessions()
-        if job.period:
-            sessions = [s for s in sessions if s.startswith(str(job.period))]
         if job.session_filter:
+            # A session_filter pins exact sessions; the period prefix filter
+            # (a DE-only ID convention) is redundant and would wrongly drop
+            # sessions whose ID doesn't start with `job.period`. Mirror the
+            # `--no-limit-to-period` choice in `_build_argv`.
             pattern = re.compile(job.session_filter)
             sessions = [s for s in sessions if pattern.match(s)]
+        elif job.period:
+            sessions = [s for s in sessions if s.startswith(str(job.period))]
 
         if job.force:
             return len(sessions)
@@ -318,9 +322,14 @@ class WorkflowRunner:
             f"--ner-api-endpoint={self.config.settings.ner_api_endpoint}",
             "--align-timeout=1200",
             "--align-max-audio-seconds=2400",
-            "--limit-to-period",
             "--no-single-instance",
         ]
+        # `--limit-to-period` is a prefix filter (`session.startswith(period)`),
+        # a DE-only ID convention. When `session_filter` already pins exact
+        # sessions, that prefix filter is redundant and actively harmful if the
+        # job's period is wrong — so disable it for targeted reruns and let the
+        # parliament-agnostic session-filter regex be the sole selector.
+        argv.append("--no-limit-to-period" if job.session_filter else "--limit-to-period")
         if job.force:
             argv.append("--force")
         if "download" in stage_set:
