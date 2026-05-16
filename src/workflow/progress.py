@@ -21,7 +21,7 @@ from src.services.log_streamer import LogStreamer
 _SESSION_PATTERNS = [
     re.compile(r"Publishing (\d+) from"),
     re.compile(r"Time-aligning (\d+)"),
-    re.compile(r"Linking entities from .*?-(\d+)-merged"),
+    re.compile(r"Linking entities for (\d+) from"),
     re.compile(r"Extracting Named Entities for (\d+)"),
 ]
 
