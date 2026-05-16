@@ -181,6 +181,10 @@ class WorkflowRunner:
         Matches legacy `optv pull` semantics: best-effort, log+continue on failure.
         Subprocess executions of the workflow always start from the freshly-pulled
         Tools code on disk, so this is what makes Tools changes auto-propagate.
+
+        The other half of legacy `optv pull` — refreshing the NEL entity dump —
+        is requested via `--update-nel-entities` in `_build_argv` (it runs in
+        the workflow subprocess, against the data dir), not here.
         """
         for label, repo_dir in (("Tools", parliament.tools_dir), ("Data", parliament.data_dir)):
             cmd = ["git", "pull", "--ff-only"]
@@ -340,6 +344,15 @@ class WorkflowRunner:
             argv.append("--align-sentences")
         if "nel" in stage_set:
             argv.append("--link-entities")
+            # Refresh the entity registry before linking, so a platform-side
+            # registry change propagates without manual intervention. Legacy
+            # `optv pull` did this via curl; the Conductor must request it
+            # explicitly. `workflow.py` downloads the dump (from `--nel-entity-url`
+            # below, else the Tools manifest `entity_dump_url`) into
+            # metadata/entities.json, and the publish step commits it.
+            argv.append("--update-nel-entities")
+            if parliament.entity_dump_url:
+                argv.append(f"--nel-entity-url={parliament.entity_dump_url}")
         if "ner" in stage_set:
             argv.append("--extract-entities")
         return argv

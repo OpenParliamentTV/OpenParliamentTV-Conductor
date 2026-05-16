@@ -183,3 +183,30 @@ def test_build_argv_limit_to_period_depends_on_session_filter(tmp_path):
     argv = runner._build_argv(targeted, parliament, ["ner"])
     assert "--no-limit-to-period" in argv
     assert "--limit-to-period" not in argv
+
+
+def test_build_argv_nel_stage_refreshes_entity_registry(tmp_path):
+    """The nel stage must also request an entity-dump refresh, restoring the
+    behaviour legacy `optv pull` had via curl. Without it, a platform-side
+    registry change never reaches the pipeline."""
+    tools_dir = tmp_path / "tools"
+    data_dir = tmp_path / "data"
+    app_config = _make_app_config(tmp_path, tools_dir, data_dir)
+    parliament = app_config.parliaments["XX"]
+    runner = WorkflowRunner(app_config, JobManager(tmp_path / "status"),
+                            LogStreamer(tmp_path / "status"), notifier=None)
+    job = Job.new(parliament="XX", stages=["nel"], period=21)
+
+    argv = runner._build_argv(job, parliament, ["nel"])
+    assert "--link-entities" in argv
+    assert "--update-nel-entities" in argv
+    # No override configured -> workflow falls back to the Tools manifest URL.
+    assert not any(a.startswith("--nel-entity-url=") for a in argv)
+
+    # A non-nel job must not trigger the (network) refresh.
+    assert "--update-nel-entities" not in runner._build_argv(job, parliament, ["ner"])
+
+    # A configured override is passed through to workflow.py.
+    parliament.entity_dump_url = "https://example.org/dump.json"
+    argv = runner._build_argv(job, parliament, ["nel"])
+    assert "--nel-entity-url=https://example.org/dump.json" in argv
