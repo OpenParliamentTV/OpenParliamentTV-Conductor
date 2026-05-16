@@ -51,17 +51,26 @@ services:
     depends_on:
       - app
 
-  # Optional: Entity-fishing for NER (requires 8GB+ RAM)
+  # Optional: Entity-fishing for NER (German). Working set ~3-4GB.
+  # The amd64 image runs under Rosetta on Apple Silicon (functional, slower).
+  # The knowledge base is bind-mounted from ./data/entity-fishing-db/ on the
+  # host — download db-kb (Wikidata) + db-en (English, mandatory pivot) +
+  # db-de (German) from the sciencialab HuggingFace org into that dir first.
   entity-fishing:
     image: grobid/entity-fishing:0.0.6
+    platform: linux/amd64
     container_name: optv-entity-fishing
     restart: unless-stopped
     profiles: [ner]
     ports:
       - "8090:8090"
+    volumes:
+      - ./data/entity-fishing-db/db-kb:/opt/entity-fishing/data/db/db-kb
+      - ./data/entity-fishing-db/db-en:/opt/entity-fishing/data/db/db-en
+      - ./data/entity-fishing-db/db-de:/opt/entity-fishing/data/db/db-de
     deploy:
       resources:
         limits:
-          memory: 8G
-        reservations:
           memory: 6G
+        reservations:
+          memory: 4G
