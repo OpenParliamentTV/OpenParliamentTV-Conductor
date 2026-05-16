@@ -76,7 +76,11 @@ execute_command () {
         for d in $REPOS
         do
             echo "Updating $d"
-            ( cd "$d" && git pull )
+            # entities.json is a generated artifact (re-fetched by the curl
+            # below); discard any local copy first so `git pull` is never
+            # blocked by "local changes would be overwritten by merge".
+            # Harmless in repos without that path (checkout no-ops via 2>/dev/null).
+            ( cd "$d" && { git checkout -- metadata/entities.json 2>/dev/null ; git pull ; } )
             if [ ! $? ]
             then
                 retcode=1
