@@ -76,11 +76,13 @@ execute_command () {
         for d in $REPOS
         do
             echo "Updating $d"
-            # entities.json is a generated artifact (re-fetched by the curl
-            # below); discard any local copy first so `git pull` is never
-            # blocked by "local changes would be overwritten by merge".
-            # Harmless in repos without that path (checkout no-ops via 2>/dev/null).
-            ( cd "$d" && { git checkout -- metadata/entities.json 2>/dev/null ; git pull ; } )
+            # Force-sync to origin: discard any local state (the curl-written
+            # entities.json, stale pipeline output, a stranded unpushed commit)
+            # so the working tree matches origin before the pipeline runs.
+            # Safe because the flock guarantees no job is running; self-healing
+            # because it recovers from any diverged/dirty state. Tracked files
+            # only -- the gitignored caches (alignment etc.) are untouched.
+            ( cd "$d" && git fetch origin && git reset --hard @{u} )
             if [ ! $? ]
             then
                 retcode=1
@@ -215,6 +217,17 @@ if [ -z "$*" ]
 then
     # This will exit
     execute_command help
+fi
+
+# Single-instance guard: cron fires every ~10 min, but pipeline jobs
+# (download/align/NER) often run much longer. Without this, overlapping
+# runs would race each other's git operations. If another run holds the
+# lock, exit cleanly (0) so cron does not flag it as a failure.
+exec 9>"${CALLDIR}/optv-run.lock"
+if ! flock -n 9
+then
+    log "Another optv run is in progress - skipping this invocation"
+    exit 0
 fi
 
 for command in "$@"
