@@ -193,6 +193,9 @@ async def parliaments_index():
 # the `/sessions/{session_id}` catch-all below.
 
 
+_STAGE_NAMES = ("download", "parse", "merge", "nel", "align", "ner")
+
+
 @router.get("/parliaments/{parliament_id}/sessions/list", response_class=HTMLResponse)
 def fragment_sessions(
     parliament_id: str,
@@ -201,6 +204,14 @@ def fragment_sessions(
     filter: str = "",
     date_from: str = "",
     date_to: str = "",
+    sort: str = "date",
+    dir: str = "desc",
+    stage_download: str = "",
+    stage_parse: str = "",
+    stage_merge: str = "",
+    stage_nel: str = "",
+    stage_align: str = "",
+    stage_ner: str = "",
     offset: int = 0,
     limit: int = 50,
     token: str | None = Cookie(default=None, alias=COOKIE_NAME),
@@ -228,20 +239,54 @@ def fragment_sessions(
             sessions = [s for s in sessions if pattern.search(s)]
         except re.error:
             pass
-    def _sort_key(sid: str) -> tuple[str, int]:
-        ds = sc.session_date_start(parliament_id, p, sid) or ""
-        try:
-            num = int(sid)
-        except ValueError:
-            num = 0
-        return (ds, num)
 
-    sessions_sorted = sorted(sessions, key=_sort_key, reverse=True)
+    stage_filters = {
+        "download": stage_download,
+        "parse": stage_parse,
+        "merge": stage_merge,
+        "nel": stage_nel,
+        "align": stage_align,
+        "ner": stage_ner,
+    }
+    active = {k: v for k, v in stage_filters.items() if v in ("done", "todo")}
+    status_by_sid: dict[str, dict[str, str]] = {}
+    if active:
+        status_by_sid = {
+            s: tracker.session_status_cheap(parliament_id, p, s) for s in sessions
+        }
+
+        def _keep(sid: str) -> bool:
+            st = status_by_sid[sid]
+            for k, v in active.items():
+                done = st.get(k) == "complete"
+                if v == "done" and not done:
+                    return False
+                if v == "todo" and done:
+                    return False
+            return True
+
+        sessions = [s for s in sessions if _keep(s)]
+
+    def _int_or_zero(sid: str) -> int:
+        try:
+            return int(sid)
+        except ValueError:
+            return 0
+
+    if sort == "session":
+        def _sort_key(sid: str) -> tuple:
+            return (_int_or_zero(sid), sc.session_date_start(parliament_id, p, sid) or "")
+    else:
+        def _sort_key(sid: str) -> tuple:
+            return (sc.session_date_start(parliament_id, p, sid) or "", _int_or_zero(sid))
+
+    reverse = (dir == "desc")
+    sessions_sorted = sorted(sessions, key=_sort_key, reverse=reverse)
     page = sessions_sorted[offset : offset + limit]
     rows = [
         {
             "id": sid,
-            "status": tracker.session_status_cheap(parliament_id, p, sid),
+            "status": status_by_sid[sid] if sid in status_by_sid else tracker.session_status_cheap(parliament_id, p, sid),
             "date_start": sc.session_date_start(parliament_id, p, sid),
         }
         for sid in page
@@ -255,6 +300,10 @@ def fragment_sessions(
         "limit": limit,
         "has_more": has_more,
         "is_initial": offset == 0,
+        "sort": sort,
+        "dir": dir,
+        "stage_filters": stage_filters,
+        "stage_names": list(_STAGE_NAMES),
     })
 
 
@@ -344,6 +393,14 @@ async def sessions_page(
     filter: str = "",
     date_from: str = "",
     date_to: str = "",
+    sort: str = "date",
+    dir: str = "desc",
+    stage_download: str = "",
+    stage_parse: str = "",
+    stage_merge: str = "",
+    stage_nel: str = "",
+    stage_align: str = "",
+    stage_ner: str = "",
     token: str | None = Cookie(default=None, alias=COOKIE_NAME),
     config: AppConfig = Depends(get_config),
 ):
@@ -367,6 +424,17 @@ async def sessions_page(
         "initial_filter": filter,
         "initial_date_from": date_from,
         "initial_date_to": date_to,
+        "initial_sort": sort if sort in ("session", "date") else "date",
+        "initial_dir": dir if dir in ("asc", "desc") else "desc",
+        "initial_stage_filters": {
+            "download": stage_download,
+            "parse": stage_parse,
+            "merge": stage_merge,
+            "nel": stage_nel,
+            "align": stage_align,
+            "ner": stage_ner,
+        },
+        "stage_names": list(_STAGE_NAMES),
     })
     return templates.TemplateResponse(request, "parliaments/sessions/list.html", ctx)
 

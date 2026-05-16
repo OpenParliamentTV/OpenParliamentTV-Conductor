@@ -1,13 +1,69 @@
-{% set stage_list = ["download","parse","merge","nel","align","ner"] %}
+{% set stage_list = stage_names if stage_names is defined else ["download","parse","merge","nel","align","ner"] %}
+{% set sf = stage_filters if stage_filters is defined else {} %}
+{% set hx_include_all = "[name='period'],[name='filter'],[name='date_from'],[name='date_to'],[name='sort'],[name='dir'],[name^='stage_']" %}
 {% if is_initial %}
 <table class="w-full text-sm">
   <thead class="bg-slate-50 text-xs text-slate-600">
     <tr>
-      <th class="w-10 px-3 py-2"></th>
-      <th class="text-left px-3 py-2">Session</th>
-      <th class="text-left px-3 py-2">Date</th>
+      <th class="w-10 px-3 py-2 text-center">
+        <input type="checkbox"
+               aria-label="Select all visible"
+               :checked="visibleIds().length > 0 && visibleIds().every(id => selected.includes(id))"
+               x-effect="
+                 const v = visibleIds();
+                 const n = v.filter(id => selected.includes(id)).length;
+                 if ($el) $el.indeterminate = n > 0 && n < v.length;
+               "
+               @change="
+                 const v = visibleIds();
+                 if ($event.target.checked) {
+                   selected = Array.from(new Set([...selected, ...v]));
+                 } else {
+                   selected = selected.filter(id => !v.includes(id));
+                 }
+               " />
+      </th>
+      <th class="text-left px-3 py-2">
+        <button type="button" class="flex items-center gap-1 hover:text-slate-900"
+                @click="setSort('session')"
+                hx-get="/parliaments/{{ parliament.id }}/sessions/list"
+                hx-trigger="click delay:1ms"
+                hx-target="#session-table"
+                hx-include="{{ hx_include_all }}">
+          Session
+          <span x-show="sort === 'session'" x-text="dir === 'asc' ? '\u25B2' : '\u25BC'"></span>
+          <span x-show="sort !== 'session'" class="text-slate-300">&#9662;</span>
+        </button>
+      </th>
+      <th class="text-left px-3 py-2">
+        <button type="button" class="flex items-center gap-1 hover:text-slate-900"
+                @click="setSort('date')"
+                hx-get="/parliaments/{{ parliament.id }}/sessions/list"
+                hx-trigger="click delay:1ms"
+                hx-target="#session-table"
+                hx-include="{{ hx_include_all }}">
+          Date
+          <span x-show="sort === 'date'" x-text="dir === 'asc' ? '\u25B2' : '\u25BC'"></span>
+          <span x-show="sort !== 'date'" class="text-slate-300">&#9662;</span>
+        </button>
+      </th>
       {% for s in stage_list %}
-      <th class="text-center px-2 py-2">{{ s }}</th>
+      <th class="text-center px-2 py-2">
+        <div class="flex flex-col items-center gap-1">
+          <span>{{ s }}</span>
+          <select name="stage_{{ s }}"
+                  class="text-[10px] border rounded px-1 py-0.5 bg-white"
+                  @change="syncUrl()"
+                  hx-get="/parliaments/{{ parliament.id }}/sessions/list"
+                  hx-trigger="change"
+                  hx-target="#session-table"
+                  hx-include="{{ hx_include_all }}">
+            <option value="" {% if sf.get(s, '') == '' %}selected{% endif %}>any</option>
+            <option value="done" {% if sf.get(s) == 'done' %}selected{% endif %}>done</option>
+            <option value="todo" {% if sf.get(s) == 'todo' %}selected{% endif %}>todo</option>
+          </select>
+        </div>
+      </th>
       {% endfor %}
     </tr>
   </thead>
@@ -16,7 +72,7 @@
     {% for row in rows %}
     <tr>
       <td class="px-3 py-2 text-center">
-        <input type="checkbox" :value="'{{ row.id }}'" x-model="selected" />
+        <input type="checkbox" :value="'{{ row.id }}'" :data-row-id="'{{ row.id }}'" x-model="selected" />
       </td>
       <td class="px-3 py-2 font-mono">
         <a href="/parliaments/{{ parliament.id }}/sessions/{{ row.id }}"
@@ -46,7 +102,7 @@
     <tr hx-get="/parliaments/{{ parliament.id }}/sessions/list?period={{ period }}&offset={{ offset + limit }}&limit={{ limit }}"
         hx-trigger="revealed"
         hx-swap="outerHTML"
-        hx-include="[name='filter'], [name='date_from'], [name='date_to']">
+        hx-include="[name='filter'],[name='date_from'],[name='date_to'],[name='sort'],[name='dir'],[name^='stage_']">
       <td colspan="9" class="px-3 py-3 text-center text-xs text-slate-400">Loading more…</td>
     </tr>
     {% endif %}

@@ -3,6 +3,20 @@
 {% block content %}
 <div x-data="{
        selected: [], showBulk: false, showDateRerun: false,
+       sort: '{{ initial_sort }}', dir: '{{ initial_dir }}',
+       setSort(col) {
+         if (this.sort === col) {
+           this.dir = this.dir === 'asc' ? 'desc' : 'asc';
+         } else {
+           this.sort = col;
+           this.dir = col === 'date' ? 'desc' : 'asc';
+         }
+         this.syncUrl();
+       },
+       visibleIds() {
+         return Array.from(this.$root.querySelectorAll('#session-rows input[type=checkbox][data-row-id]'))
+                     .map(el => el.dataset.rowId);
+       },
        syncUrl() {
          const root = this.$root;
          const get = (name) => (root.querySelector('[name=\'' + name + '\']') || {}).value || '';
@@ -15,11 +29,18 @@
          if (filter) params.set('filter', filter);
          if (date_from) params.set('date_from', date_from);
          if (date_to) params.set('date_to', date_to);
+         if (this.sort && this.sort !== 'date') params.set('sort', this.sort);
+         if (this.dir && this.dir !== 'desc') params.set('dir', this.dir);
+         root.querySelectorAll('[name^=\'stage_\']').forEach(el => {
+           if (el.value) params.set(el.name, el.value);
+         });
          const qs = params.toString();
          history.replaceState({}, '', location.pathname + (qs ? '?' + qs : ''));
        }
      }"
      class="space-y-4">
+  <input type="hidden" name="sort" x-model="sort" />
+  <input type="hidden" name="dir" x-model="dir" />
   <div class="flex flex-wrap items-end gap-3">
     <div>
       <label class="block text-xs text-slate-600">Period</label>
@@ -27,7 +48,7 @@
               @change="syncUrl()"
               hx-get="/parliaments/{{ parliament.id }}/sessions/list"
               hx-trigger="change" hx-target="#session-table"
-              hx-include="[name='filter'], [name='date_from'], [name='date_to']">
+              hx-include="[name='filter'], [name='date_from'], [name='date_to'], [name='sort'], [name='dir'], [name^='stage_']">
         <option value="" {% if selected_period == "" %}selected{% endif %}>all</option>
         {% for p in periods %}
         <option value="{{ p }}" {% if p == selected_period %}selected{% endif %}>{{ p }}</option>
@@ -44,7 +65,7 @@
              hx-get="/parliaments/{{ parliament.id }}/sessions/list"
              hx-trigger="keyup changed delay:400ms"
              hx-target="#session-table"
-             hx-include="[name='period'], [name='date_from'], [name='date_to']">
+             hx-include="[name='period'], [name='date_from'], [name='date_to'], [name='sort'], [name='dir'], [name^='stage_']">
     </div>
     <div>
       <label class="block text-xs text-slate-600">From</label>
@@ -54,7 +75,7 @@
              @change="syncUrl()"
              hx-get="/parliaments/{{ parliament.id }}/sessions/list"
              hx-trigger="change" hx-target="#session-table"
-             hx-include="[name='period'], [name='filter'], [name='date_to']">
+             hx-include="[name='period'], [name='filter'], [name='date_to'], [name='sort'], [name='dir'], [name^='stage_']">
     </div>
     <div>
       <label class="block text-xs text-slate-600">To</label>
@@ -64,7 +85,7 @@
              @change="syncUrl()"
              hx-get="/parliaments/{{ parliament.id }}/sessions/list"
              hx-trigger="change" hx-target="#session-table"
-             hx-include="[name='period'], [name='filter'], [name='date_from']">
+             hx-include="[name='period'], [name='filter'], [name='date_from'], [name='sort'], [name='dir'], [name^='stage_']">
     </div>
     <button type="button"
             class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
@@ -84,7 +105,7 @@
        class="bg-white border border-slate-200 rounded-lg overflow-hidden"
        hx-get="/parliaments/{{ parliament.id }}/sessions/list"
        hx-trigger="load"
-       hx-include="[name='period'], [name='filter'], [name='date_from'], [name='date_to']">
+       hx-include="[name='period'], [name='filter'], [name='date_from'], [name='date_to'], [name='sort'], [name='dir'], [name^='stage_']">
     Loading…
   </div>
 
