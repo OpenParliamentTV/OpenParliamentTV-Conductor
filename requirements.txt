@@ -32,6 +32,10 @@ pytest-asyncio>=0.23.0
 feedparser
 lxml
 spacy
+# spaCy's CLI imports click directly (cli/_util.py), but its only path to
+# click is via typer, and typer >=0.26 dropped click from its install_requires.
+# Pinning typer would age badly; declaring the real dep explicitly is robust.
+click
 spacyfishing
 numpy
 aeneas
