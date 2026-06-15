@@ -34,7 +34,7 @@ _DATA_NONEMPTY_RE = re.compile(r'"data"\s*:\s*\[\s*\{')
 # the source of truth regardless of session-ID format (DE IDs encode the
 # period as a prefix, SE IDs are year-prefixed, etc.). Appears ~byte 350.
 _ELECTORAL_PERIOD_RE = re.compile(r'"electoralPeriod"\s*:\s*\{\s*"number"\s*:\s*(\d+)')
-# 16 KB header read covers evidence signals (debug.align-duration, debug.ner-duration,
+# 16 KB header read covers evidence signals (debug.alignDuration, debug.nerDuration,
 # people[].wid) for typical sessions; the very first speech item usually fits.
 _HEADER_BYTES = 16384
 
@@ -78,8 +78,8 @@ def _extract_processing_stages(path: Path) -> set[str]:
        versions that wrote sparse `meta.processing` blocks. Tools' own
        `Config.status()` uses these same signals; we mirror them so the
        Conductor UI agrees with what actually ran:
-         - `debug.align-duration` per item -> align ran (aeneas wrote durations)
-         - `debug.ner-duration` per item   -> ner ran   (entity-fishing wrote durations)
+         - `debug.alignDuration` per item -> align ran (aeneas wrote durations)
+         - `debug.nerDuration` per item   -> ner ran   (entity-fishing wrote durations)
          - any data item present           -> merge + parse_media + parse_proceedings
                                               ran (you can't have items otherwise)
     """
@@ -91,9 +91,9 @@ def _extract_processing_stages(path: Path) -> set[str]:
     m = _PROCESSING_BLOCK_RE.search(head_meta)
     stages = set(_PROCESSING_KEY_RE.findall(m.group("body"))) if m else set()
 
-    if '"align-duration"' in head:
+    if '"alignDuration"' in head:
         stages.add("align")
-    if '"ner-duration"' in head:
+    if '"nerDuration"' in head:
         stages.add("ner")
     if _DATA_NONEMPTY_RE.search(head):
         stages.update({"merge", "parse_media", "parse_proceedings"})
@@ -497,7 +497,7 @@ class SessionContentService:
             for tc in (speech.get("textContents") or [])
         )
         return {
-            "aligned": bool(debug.get("align-duration")),
+            "aligned": bool(debug.get("alignDuration")),
             "confidence": confidence,
             "linked_media_count": linked_count,
             "has_text": has_text,
