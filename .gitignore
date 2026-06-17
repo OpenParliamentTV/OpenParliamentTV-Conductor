@@ -63,7 +63,7 @@ data/
 # ===================
 # Local Docker overrides
 # ===================
-docker-compose.override.yml
+docker-compose.override.*
 
 # ===================
 # Python
