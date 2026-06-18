@@ -96,11 +96,19 @@
         link entities (NEL) and time-align. Equivalent to the legacy
         <code class="font-mono">optv update</code>.
       </p>
+      {% if update_stages %}
       <button type="button"
               class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded"
               @click="show = true">
         Run update
       </button>
+      {% else %}
+      <button type="button" disabled
+              class="bg-slate-200 text-slate-400 cursor-not-allowed text-sm px-4 py-2 rounded"
+              title="No runnable stages are enabled for this parliament">
+        Run update
+      </button>
+      {% endif %}
     </div>
 
     <div x-show="show" x-cloak
@@ -110,7 +118,7 @@
         <h3 class="text-lg font-semibold mb-2">Run workflow update</h3>
         <p class="text-sm text-slate-600 mb-3">
           Queues a job for period {{ overview.current_period }} with stages
-          <span class="font-mono">download, parse, merge, nel, align</span>.
+          <span class="font-mono">{{ update_stages | join(", ") }}</span>.
         </p>
         <form hx-post="/parliaments/{{ overview.id }}/run-update"
               hx-swap="none"

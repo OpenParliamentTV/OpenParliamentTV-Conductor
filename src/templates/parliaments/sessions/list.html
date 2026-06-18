@@ -123,16 +123,24 @@
             @htmx:after-request="showBulk = false; selected = []">
         <input type="hidden" name="ids" x-bind:value="selected.join(',')" />
         <div class="grid grid-cols-2 gap-2 text-sm">
-          {% for s in ["download","parse","merge","nel","align","ner"] %}
-          <label class="flex items-center gap-2">
-            <input type="checkbox" name="stages" value="{{ s }}" /> {{ s }}
+          {% for s in stage_names %}
+          {% set reason = stage_reasons.get(s) if stage_reasons else None %}
+          <label class="flex items-center gap-2 {{ 'text-slate-400 cursor-not-allowed' if reason else '' }}"
+                 {% if reason %}title="{{ reason }}"{% endif %}>
+            <input type="checkbox" name="stages" value="{{ s }}" {{ 'disabled' if reason else '' }} /> {{ s }}
           </label>
           {% endfor %}
         </div>
-        <label class="flex items-center gap-2 mt-3 text-sm">
-          <input type="checkbox" name="force" value="1" /> force (ignore existing outputs)
-        </label>
-        <div class="flex justify-end gap-2 mt-4">
+        <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200">
+          <label class="flex items-center gap-2 text-sm cursor-pointer mr-auto"
+                 title="Re-process the selected stages even if their outputs already exist">
+            <span class="relative inline-flex items-center">
+              <input type="checkbox" name="force" value="1" class="sr-only peer" />
+              <span class="block w-9 h-5 bg-slate-300 rounded-full transition-colors peer-checked:bg-blue-600"></span>
+              <span class="absolute left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></span>
+            </span>
+            <span class="text-slate-600">force</span>
+          </label>
           <button type="button" class="px-3 py-1 rounded border" @click="showBulk = false">Cancel</button>
           <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Re-run</button>
         </div>
@@ -161,16 +169,24 @@
           </div>
         </div>
         <div class="grid grid-cols-2 gap-2 text-sm">
-          {% for s in ["download","parse","merge","nel","align","ner"] %}
-          <label class="flex items-center gap-2">
-            <input type="checkbox" name="stages" value="{{ s }}" /> {{ s }}
+          {% for s in stage_names %}
+          {% set reason = stage_reasons.get(s) if stage_reasons else None %}
+          <label class="flex items-center gap-2 {{ 'text-slate-400 cursor-not-allowed' if reason else '' }}"
+                 {% if reason %}title="{{ reason }}"{% endif %}>
+            <input type="checkbox" name="stages" value="{{ s }}" {{ 'disabled' if reason else '' }} /> {{ s }}
           </label>
           {% endfor %}
         </div>
-        <label class="flex items-center gap-2 mt-3 text-sm">
-          <input type="checkbox" name="force" value="1" /> force (ignore existing outputs)
-        </label>
-        <div class="flex justify-end gap-2 mt-4">
+        <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200">
+          <label class="flex items-center gap-2 text-sm cursor-pointer mr-auto"
+                 title="Re-process the selected stages even if their outputs already exist">
+            <span class="relative inline-flex items-center">
+              <input type="checkbox" name="force" value="1" class="sr-only peer" />
+              <span class="block w-9 h-5 bg-slate-300 rounded-full transition-colors peer-checked:bg-blue-600"></span>
+              <span class="absolute left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></span>
+            </span>
+            <span class="text-slate-600">force</span>
+          </label>
           <button type="button" class="px-3 py-1 rounded border" @click="showDateRerun = false">Cancel</button>
           <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Re-run</button>
         </div>

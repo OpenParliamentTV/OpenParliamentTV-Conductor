@@ -293,6 +293,34 @@ def test_rerun_session(app_client):
     assert "job_id" in r.json()
 
 
+def test_create_job_rejects_disabled_stage(app_client):
+    # `ner` is `false` in the test parliament's stages — must be rejected, not queued.
+    r = app_client.post(
+        "/api/parliaments/DE/jobs",
+        json={"period": 21, "stages": ["merge", "ner"]},
+    )
+    assert r.status_code == 400
+    assert "ner" in r.json()["detail"]
+
+
+def test_create_job_allows_publish(app_client):
+    # `publish` isn't gated by parliaments.yaml `stages:` — it must pass the guard.
+    r = app_client.post(
+        "/api/parliaments/DE/jobs",
+        json={"period": 21, "stages": ["publish"]},
+    )
+    assert r.status_code == 200
+
+
+def test_rerun_session_rejects_disabled_stage(app_client):
+    r = app_client.post(
+        "/api/parliaments/DE/sessions/21001/rerun",
+        json={"stages": ["ner"]},
+    )
+    assert r.status_code == 400
+    assert "ner" in r.json()["detail"]
+
+
 def test_rerun_by_date(app_client):
     r = app_client.post(
         "/api/parliaments/DE/sessions/rerun-by-date",

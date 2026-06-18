@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from src.auth.dependencies import require_role
-from src.config import AppConfig, ParliamentConfig, get_config
+from src.config import AppConfig, ParliamentConfig, get_config, stage_disable_reasons
 from src.services.job_manager import Job, JobManager
 from src.services.registry import get_job_manager
 from src.services.session_content import get_session_content
@@ -33,6 +33,20 @@ def _resolve(parliament_id: str, config: AppConfig) -> ParliamentConfig:
     if not parliament:
         raise HTTPException(status_code=404, detail=f"Unknown parliament {parliament_id}")
     return parliament
+
+
+def _check_runnable(parliament: ParliamentConfig, config: AppConfig, stages: list[str]) -> None:
+    """Reject stages that are unknown or not runnable for this parliament/deployment
+    (disabled in parliaments.yaml, unsupported, or NER without an endpoint)."""
+    reasons = stage_disable_reasons(parliament, config.settings)
+    bad = {
+        s: (reasons[s] if s in reasons else "unknown stage")
+        for s in stages
+        if s not in reasons or reasons[s]
+    }
+    if bad:
+        detail = "; ".join(f"{s} ({r})" for s, r in bad.items())
+        raise HTTPException(status_code=400, detail=f"Stage(s) not runnable: {detail}")
 
 
 def _period_for_session(parliament_id: str, parliament: ParliamentConfig, session_id: str) -> int:
@@ -120,6 +134,7 @@ async def rerun_session(
     _user: dict = Depends(require_role("editor")),
 ) -> dict:
     parliament = _resolve(parliament_id, config)
+    _check_runnable(parliament, config, payload.stages)
     job = Job.new(
         parliament=parliament_id,
         stages=payload.stages,
@@ -141,6 +156,7 @@ async def rerun_by_date(
     _user: dict = Depends(require_role("editor")),
 ) -> dict:
     parliament = _resolve(parliament_id, config)
+    _check_runnable(parliament, config, payload.stages)
     period = payload.period or parliament.current_period
     matches = get_session_content().sessions_in_range(
         parliament_id, parliament, period, payload.date_from, payload.date_to,

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from src.auth.dependencies import require_role
-from src.config import AppConfig, get_config
+from src.config import AppConfig, get_config, stage_disable_reasons
 from src.services.job_manager import Job, JobManager
 from src.services.log_streamer import LogStreamer
 from src.services.registry import get_job_manager, get_log_streamer
@@ -47,6 +47,13 @@ async def create_job(
     bad = [s for s in payload.stages if s not in valid]
     if bad:
         raise HTTPException(status_code=400, detail=f"Unknown stages: {bad}")
+    # `publish` is handled separately by the runner (git push) and isn't gated by
+    # parliaments.yaml `stages:` — only the pipeline stages get the runnable check.
+    reasons = stage_disable_reasons(config.parliaments[parliament_id], config.settings)
+    not_runnable = {s: reasons[s] for s in payload.stages if reasons.get(s)}
+    if not_runnable:
+        detail = "; ".join(f"{s} ({r})" for s, r in not_runnable.items())
+        raise HTTPException(status_code=400, detail=f"Stage(s) not runnable: {detail}")
     job = Job.new(
         parliament=parliament_id,
         stages=payload.stages,

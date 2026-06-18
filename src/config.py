@@ -70,6 +70,10 @@ class Settings(BaseSettings):
             )
 
 
+# Canonical pipeline stage order (publish is handled separately by the runner).
+PIPELINE_STAGE_ORDER = ("download", "parse", "merge", "nel", "align", "ner")
+
+
 class ParliamentStages(BaseModel):
     download: bool = True
     parse: bool = True
@@ -113,6 +117,32 @@ class ParliamentConfig(BaseModel):
         if self.current_period is None and self.periods:
             self.current_period = max(self.periods)
         return self
+
+
+def stage_disable_reasons(
+    parliament: ParliamentConfig, settings: Settings
+) -> dict[str, str | None]:
+    """For each pipeline stage, a human-readable reason it can't run for this
+    parliament on this deployment, or None if it's runnable.
+
+    Three gates, checked most-fundamental first: (1) the Tools manifest lists
+    the stage in `supported_stages` (the workflow implements it at all),
+    (2) the deployment enabled it in parliaments.yaml `stages:`, and (3) machine
+    capability — `ner` needs a configured NER endpoint to reach entity-fishing.
+    Used to gray out checkboxes in the re-run dialogs and to reject non-runnable
+    stages server-side (UI graying alone is cosmetic).
+    """
+    reasons: dict[str, str | None] = {}
+    for s in PIPELINE_STAGE_ORDER:
+        if s not in parliament.supported_stages:
+            reasons[s] = "not supported by this parliament's workflow"
+        elif not getattr(parliament.stages, s, False):
+            reasons[s] = "disabled for this parliament in parliaments.yaml"
+        elif s == "ner" and not settings.ner_api_endpoint:
+            reasons[s] = "no NER endpoint configured (set NER_API_ENDPOINT)"
+        else:
+            reasons[s] = None
+    return reasons
 
 
 class UserEntry(BaseModel):

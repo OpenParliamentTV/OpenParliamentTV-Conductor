@@ -25,7 +25,14 @@ from fastapi.templating import Jinja2Templates
 
 from src.auth import jwt as app_jwt
 from src.auth.dependencies import ROLE_RANK
-from src.config import ANONYMOUS_ADMIN, AppConfig, ParliamentConfig, get_config
+from src.config import (
+    ANONYMOUS_ADMIN,
+    AppConfig,
+    ParliamentConfig,
+    PIPELINE_STAGE_ORDER,
+    get_config,
+    stage_disable_reasons,
+)
 from src.services.job_manager import Job, JobManager
 from src.services.parliament_stats import get_parliament_stats
 from src.services.registry import get_job_manager
@@ -72,6 +79,24 @@ def _resolve_parliament(parliament_id: str, config: AppConfig) -> ParliamentConf
     if not p:
         raise HTTPException(status_code=404, detail=f"Unknown parliament {parliament_id}")
     return p
+
+
+def _reject_unrunnable_stages(
+    parliament: ParliamentConfig, config: AppConfig, stages: list[str]
+) -> None:
+    """Backend guard mirroring the grayed-out checkboxes: reject any submitted
+    stage that's unknown or not runnable for this parliament/deployment, so a
+    disabled box re-enabled via devtools or a direct POST can't queue a doomed
+    job. UI graying alone is cosmetic."""
+    reasons = stage_disable_reasons(parliament, config.settings)
+    bad = {
+        s: (reasons[s] if s in reasons else "unknown stage")
+        for s in stages
+        if s not in reasons or reasons[s]
+    }
+    if bad:
+        detail = "; ".join(f"{s} ({r})" for s, r in bad.items())
+        raise HTTPException(status_code=400, detail=f"Stage(s) not runnable: {detail}")
 
 
 def _nav_ctx(
@@ -201,6 +226,14 @@ async def parliaments_index():
 
 
 _STAGE_NAMES = ("download", "parse", "merge", "nel", "align", "ner")
+# Stage set the "Run update" button queues — the legacy `optv update` pipeline
+# minus `ner`. Filtered to whatever's actually runnable per parliament.
+_UPDATE_STAGES = ("download", "parse", "merge", "nel", "align")
+
+
+def _runnable_update_stages(parliament: ParliamentConfig, config: AppConfig) -> list[str]:
+    reasons = stage_disable_reasons(parliament, config.settings)
+    return [s for s in _UPDATE_STAGES if not reasons.get(s)]
 
 
 @router.get("/parliaments/{parliament_id}/sessions/list", response_class=HTMLResponse)
@@ -328,6 +361,7 @@ async def sessions_bulk_rerun(
     p = _resolve_parliament(parliament_id, config)
     if not stages:
         raise HTTPException(status_code=400, detail="At least one stage required")
+    _reject_unrunnable_stages(p, config, stages)
     session_ids = [i for i in ids.split(",") if i]
     if not session_ids:
         return Response(status_code=204)
@@ -373,6 +407,7 @@ async def sessions_bulk_rerun_by_date(
     p = _resolve_parliament(parliament_id, config)
     if not stages:
         raise HTTPException(status_code=400, detail="At least one stage required")
+    _reject_unrunnable_stages(p, config, stages)
     effective_period = period or p.current_period
     matches = get_session_content().sessions_in_range(
         parliament_id, p, effective_period, date_from or None, date_to or None,
@@ -442,6 +477,7 @@ async def sessions_page(
             "ner": stage_ner,
         },
         "stage_names": list(_STAGE_NAMES),
+        "stage_reasons": stage_disable_reasons(p, config.settings),
     })
     return templates.TemplateResponse(request, "parliaments/sessions/list.html", ctx)
 
@@ -488,6 +524,8 @@ async def session_detail_page(
     ctx.update({
         "summary": asdict(summary),
         "agenda_items": content,
+        "stage_names": list(PIPELINE_STAGE_ORDER),
+        "stage_reasons": stage_disable_reasons(parliament, config.settings),
     })
     return templates.TemplateResponse(request, "parliaments/sessions/detail.html", ctx)
 
@@ -636,9 +674,12 @@ async def run_workflow_update(
 ):
     _require_page_user(token, config, minimum="editor")
     p = _resolve_parliament(parliament_id, config)
+    stages = _runnable_update_stages(p, config)
+    if not stages:
+        raise HTTPException(status_code=400, detail="No runnable update stages enabled for this parliament")
     job = Job.new(
         parliament=parliament_id,
-        stages=["download", "parse", "merge", "nel", "align"],
+        stages=stages,
         period=p.current_period,
         force=bool(force),
         publish_on_success=bool(publish),
@@ -667,4 +708,5 @@ async def parliament_landing(
     overview = get_parliament_stats().overview(parliament_id, parliament, config)
     ctx = _nav_ctx(user, config, active_section="parliaments", active_sub="overview", parliament_id=parliament_id)
     ctx["overview"] = asdict(overview)
+    ctx["update_stages"] = _runnable_update_stages(parliament, config)
     return templates.TemplateResponse(request, "parliaments/detail.html", ctx)
