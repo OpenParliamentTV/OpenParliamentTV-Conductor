@@ -171,6 +171,38 @@ class JobManager:
                 ids.add(entry["schedule_id"])
         return ids
 
+    def clear_queue(self, parliament: str | None = None) -> int:
+        """Drop not-yet-started queued jobs (the running job is untouched).
+
+        Scoped to `parliament` when given. Each dropped job is recorded in
+        history as cancelled, mirroring single-job `cancel`. Returns the count.
+        """
+        with self._locked():
+            queue = self._read(self.queue_file) or []
+            removed = [e for e in queue if parliament is None or e.get("parliament") == parliament]
+            if not removed:
+                return 0
+            kept = [e for e in queue if e not in removed]
+            self._write(self.queue_file, kept)
+            for entry in removed:
+                entry["status"] = "cancelled"
+                entry["finished_at"] = _utcnow()
+                self._write(self.history_dir / f"{entry['id']}.json", entry)
+            return len(removed)
+
+    def clear_history(self, parliament: str | None = None) -> int:
+        """Delete history files, scoped to `parliament` when given. Returns count."""
+        with self._locked():
+            deleted = 0
+            for path in self.history_dir.glob("*.json"):
+                if parliament is not None:
+                    data = self._read(path)
+                    if not data or data.get("parliament") != parliament:
+                        continue
+                path.unlink()
+                deleted += 1
+            return deleted
+
     def list_queue(self) -> list[dict[str, Any]]:
         return self._read(self.queue_file) or []
 

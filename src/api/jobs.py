@@ -92,6 +92,32 @@ async def get_current(
     return {}
 
 
+@router.post("/queue/clear")
+async def clear_queue(
+    parliament_id: str,
+    config: AppConfig = Depends(get_config),
+    jm: JobManager = Depends(get_job_manager),
+    _user: dict = Depends(require_role("editor")),
+) -> dict:
+    if parliament_id not in config.parliaments:
+        raise HTTPException(status_code=404, detail=f"Unknown parliament {parliament_id}")
+    removed = jm.clear_queue(parliament=parliament_id)
+    return {"removed": removed}
+
+
+@router.post("/history/clear")
+async def clear_history(
+    parliament_id: str,
+    config: AppConfig = Depends(get_config),
+    jm: JobManager = Depends(get_job_manager),
+    _user: dict = Depends(require_role("editor")),
+) -> dict:
+    if parliament_id not in config.parliaments:
+        raise HTTPException(status_code=404, detail=f"Unknown parliament {parliament_id}")
+    deleted = jm.clear_history(parliament=parliament_id)
+    return {"deleted": deleted}
+
+
 @router.get("/{job_id}")
 async def get_job(
     parliament_id: str,

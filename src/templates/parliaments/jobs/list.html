@@ -12,8 +12,15 @@
   </section>
 
   <section>
-    <h2 class="text-lg font-semibold mb-2">Queue</h2>
-    <div class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100"
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">Queue</h2>
+      <button class="text-xs text-red-600 hover:underline"
+              hx-post="/api/parliaments/{{ parliament.id }}/jobs/queue/clear"
+              hx-swap="none"
+              hx-confirm="Remove all queued jobs for {{ parliament.name }}? The running job is not affected."
+              hx-on::after-request="htmx.ajax('GET','/parliaments/{{ parliament.id }}/jobs/fragments/queue','#queue-list')">empty queue</button>
+    </div>
+    <div id="queue-list" class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100"
          hx-get="/parliaments/{{ parliament.id }}/jobs/fragments/queue"
          hx-trigger="load, every 5s" hx-swap="innerHTML">
       Loading…
@@ -21,8 +28,15 @@
   </section>
 
   <section>
-    <h2 class="text-lg font-semibold mb-2">History</h2>
-    <div class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100"
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">History</h2>
+      <button class="text-xs text-red-600 hover:underline"
+              hx-post="/api/parliaments/{{ parliament.id }}/jobs/history/clear"
+              hx-swap="none"
+              hx-confirm="Delete all job history for {{ parliament.name }}? This cannot be undone."
+              hx-on::after-request="htmx.ajax('GET','/parliaments/{{ parliament.id }}/jobs/fragments/recent?limit=50','#history-list')">empty history</button>
+    </div>
+    <div id="history-list" class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100"
          hx-get="/parliaments/{{ parliament.id }}/jobs/fragments/recent?limit=50"
          hx-trigger="load, every 10s" hx-swap="innerHTML">
       Loading…

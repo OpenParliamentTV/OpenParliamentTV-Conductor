@@ -55,3 +55,42 @@ def test_cancel_running_job_marks_cancelling(tmp_path):
     jm.dequeue()
     assert jm.cancel(a.id) is False
     assert jm.current().status == "cancelling"
+
+
+def test_clear_queue_scoped_to_parliament(tmp_path):
+    jm = JobManager(tmp_path)
+    de1 = Job.new(parliament="DE", stages=["merge"])
+    de2 = Job.new(parliament="DE", stages=["nel"])
+    at1 = Job.new(parliament="AT", stages=["merge"])
+    for j in (de1, de2, at1):
+        jm.enqueue(j)
+    assert jm.clear_queue(parliament="DE") == 2
+    assert [e["id"] for e in jm.list_queue()] == [at1.id]
+    history = jm.list_history()
+    assert {e["id"] for e in history if e["status"] == "cancelled"} == {de1.id, de2.id}
+
+
+def test_clear_queue_leaves_running_job(tmp_path):
+    jm = JobManager(tmp_path)
+    running = Job.new(parliament="DE", stages=["merge"])
+    queued = Job.new(parliament="DE", stages=["nel"])
+    jm.enqueue(running)
+    jm.enqueue(queued)
+    jm.dequeue()  # running -> current
+    assert jm.clear_queue(parliament="DE") == 1
+    assert jm.list_queue() == []
+    assert jm.current().id == running.id
+
+
+def test_clear_history_scoped_to_parliament(tmp_path):
+    jm = JobManager(tmp_path)
+    for pid in ("DE", "DE", "AT"):
+        j = Job.new(parliament=pid, stages=["merge"])
+        jm.enqueue(j)
+        popped = jm.dequeue()
+        popped.status = "completed"
+        jm.complete(popped)
+    assert jm.clear_history(parliament="DE") == 2
+    remaining = jm.list_history()
+    assert all(e["parliament"] == "AT" for e in remaining)
+    assert len(remaining) == 1
