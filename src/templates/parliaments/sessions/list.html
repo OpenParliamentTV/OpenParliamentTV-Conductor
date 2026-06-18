@@ -102,7 +102,7 @@
   </div>
 
   <div id="session-table"
-       class="bg-white border border-slate-200 rounded-lg overflow-hidden"
+       class="bg-white border border-slate-200 rounded-lg overflow-x-auto"
        hx-get="/parliaments/{{ parliament.id }}/sessions/list"
        hx-trigger="load"
        hx-include="[name='period'], [name='filter'], [name='date_from'], [name='date_to'], [name='sort'], [name='dir'], [name^='stage_']">

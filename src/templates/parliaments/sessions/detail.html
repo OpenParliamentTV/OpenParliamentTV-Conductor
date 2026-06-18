@@ -61,8 +61,8 @@
             <div class="text-xs text-slate-400">{{ item.speech_count }} speech{{ "es" if item.speech_count != 1 else "" }}</div>
           </div>
           <div class="flex items-center gap-2 shrink-0 text-[10px] uppercase tracking-wide text-slate-400">
-            <div class="w-20 text-center">aligned</div>
-            <div class="w-44 text-center">text passes import rules</div>
+            <div class="w-16 text-center">aligned</div>
+            <div class="hidden sm:block w-44 text-center">text passes import rules</div>
           </div>
         </div>
         <div class="divide-y divide-slate-100 border-t border-slate-100 ml-4">
@@ -86,7 +86,7 @@
                 <div class="text-xs text-slate-600 truncate">{{ speech.preview }}</div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
-                <div class="w-20 text-center">
+                <div class="w-16 text-center">
                   {% if speech.status.aligned %}
                     <span class="inline-block px-2 py-0.5 rounded text-[11px] bg-green-100 text-green-800"
                           title="time-alignment ran for this speech">&#10003;</span>
@@ -95,7 +95,7 @@
                           title="no alignment data">&ndash;</span>
                   {% endif %}
                 </div>
-                <div class="w-44 text-center">
+                <div class="hidden sm:block w-44 text-center">
                   {% set c = speech.status.confidence %}
                   {% set lmc = speech.status.linked_media_count %}
                   {% if speech.status.importable %}

@@ -2,10 +2,10 @@
 {% set sf = stage_filters if stage_filters is defined else {} %}
 {% set hx_include_all = "[name='period'],[name='filter'],[name='date_from'],[name='date_to'],[name='sort'],[name='dir'],[name^='stage_']" %}
 {% if is_initial %}
-<table class="w-full text-sm">
+<table class="w-full min-w-[720px] text-sm">
   <thead class="bg-slate-50 text-xs text-slate-600">
     <tr>
-      <th class="w-10 px-3 py-2 text-center">
+      <th class="w-10 px-3 py-2 text-center sticky left-0 z-20 bg-slate-50">
         <input type="checkbox"
                aria-label="Select all visible"
                :checked="visibleIds().length > 0 && visibleIds().every(id => selected.includes(id))"
@@ -23,7 +23,7 @@
                  }
                " />
       </th>
-      <th class="text-left px-3 py-2">
+      <th class="text-left px-3 py-2 sticky left-10 z-20 bg-slate-50 border-r border-slate-200">
         <button type="button" class="flex items-center gap-1 hover:text-slate-900"
                 @click="setSort('session')"
                 hx-get="/parliaments/{{ parliament.id }}/sessions/list"
@@ -71,10 +71,10 @@
 {% endif %}
     {% for row in rows %}
     <tr>
-      <td class="px-3 py-2 text-center">
+      <td class="px-3 py-2 text-center sticky left-0 z-10 bg-white">
         <input type="checkbox" :value="'{{ row.id }}'" :data-row-id="'{{ row.id }}'" x-model="selected" />
       </td>
-      <td class="px-3 py-2 font-mono">
+      <td class="px-3 py-2 font-mono sticky left-10 z-10 bg-white border-r border-slate-200">
         <a href="/parliaments/{{ parliament.id }}/sessions/{{ row.id }}"
            class="text-blue-700 hover:underline">{{ row.id }}</a>
       </td>

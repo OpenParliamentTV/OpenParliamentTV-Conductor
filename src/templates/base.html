@@ -15,7 +15,7 @@
   {% set active = active_section|default("") %}
   <header class="bg-white border-b border-slate-200">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-      <nav class="flex gap-6 text-sm font-medium items-center">
+      <nav class="flex gap-3 sm:gap-6 text-sm font-medium items-center">
         <a href="/dashboard"
            class="px-2 py-1 rounded {% if active == 'dashboard' %}bg-blue-50 text-blue-700{% else %}hover:text-blue-700{% endif %}">
           Dashboard
@@ -40,12 +40,26 @@
         {% endif %}
       </nav>
       {% if auth_enabled %}
-      <div class="flex items-center gap-3 text-sm">
-        {% if user.avatar_url %}<img src="{{ user.avatar_url }}" class="w-6 h-6 rounded-full" alt="" />{% endif %}
-        <span>{{ user.username }} <span class="text-slate-400">({{ user.role }})</span></span>
-        <form method="post" action="/auth/logout" class="inline">
-          <button class="text-blue-600 hover:underline">Logout</button>
-        </form>
+      <div x-data="{ open: false }" class="relative">
+        <button type="button" @click="open = !open"
+                class="flex items-center gap-2 text-sm rounded px-1 py-1 hover:bg-slate-50">
+          {% if user.avatar_url %}
+          <img src="{{ user.avatar_url }}" class="w-7 h-7 rounded-full" alt="" />
+          {% else %}
+          <span class="w-7 h-7 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-semibold">{{ user.username[0]|upper }}</span>
+          {% endif %}
+          <span class="hidden sm:inline">{{ user.username }}</span>
+          <span class="text-slate-400">▾</span>
+        </button>
+        <div x-show="open" x-cloak @click.away="open = false"
+             class="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded shadow-lg py-1 min-w-[160px] z-40">
+          <div class="px-3 py-2 text-xs text-slate-500 border-b border-slate-100">
+            {{ user.username }} <span class="text-slate-400">({{ user.role }})</span>
+          </div>
+          <form method="post" action="/auth/logout">
+            <button class="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-slate-50">Logout</button>
+          </form>
+        </div>
       </div>
       {% endif %}
     </div>
