@@ -65,7 +65,17 @@ async def enable_schedule(
     if not sched or sched.parliament != parliament_id:
         raise HTTPException(status_code=404, detail="Unknown schedule")
     sched.enabled = body.enabled
-    _rewrite_schedules_file(config)
+    try:
+        _rewrite_schedules_file(config)
+    except OSError as exc:
+        # Persisting failed (e.g. config mounted read-only). Roll back the
+        # in-memory flag so the UI doesn't show a pause that won't survive a
+        # restart, and surface the cause instead of a misleading success.
+        sched.enabled = not body.enabled
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not persist schedule change to schedules.yaml: {exc}",
+        )
     if registry.scheduler:
         registry.scheduler.sync_jobs()
     return {"id": schedule_id, "enabled": sched.enabled}

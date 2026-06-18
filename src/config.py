@@ -277,7 +277,19 @@ def load_users(config_dir: Path) -> dict[str, UserEntry]:
 
 
 def load_schedules(config_dir: Path) -> dict[str, ScheduleConfig]:
-    raw = _load_yaml(config_dir / "schedules.yaml").get("schedules") or {}
+    try:
+        raw = _load_yaml(config_dir / "schedules.yaml").get("schedules") or {}
+    except yaml.YAMLError:
+        # A corrupt schedules.yaml (e.g. process killed mid-rewrite during a
+        # UI pause/enable) must not take the whole Conductor down. Fail safe:
+        # start with no schedules — nothing fires — and log loudly so the
+        # operator can repair the file, after which schedules reload.
+        logger.error(
+            "schedules.yaml is corrupt or unparseable — starting with NO schedules "
+            "until it is fixed (config_dir=%s)",
+            config_dir,
+        )
+        return {}
     return {sid: ScheduleConfig(**data) for sid, data in raw.items()}
 
 

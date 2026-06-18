@@ -18,6 +18,12 @@ services:
       # Configuration (read-only)
       - ./config:/app/config:ro
 
+      # schedules.yaml is the one config file the app rewrites itself — pausing
+      # or enabling a schedule in the UI persists here. It must be writable, or
+      # the change is lost on rebuild/restart and crons come back on. Layered
+      # over the read-only mount above so secrets/users/ssh stay read-only.
+      - ./config/schedules.yaml:/app/config/schedules.yaml
+
       # Runtime state (read-write)
       - ./status:/app/status
 

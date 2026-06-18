@@ -195,3 +195,13 @@ schedules:
     app_config.reload()
     assert "nightly" in app_config.schedules
     assert app_config.schedules["nightly"].stages == ["merge"]
+
+
+def test_corrupt_schedules_yaml_falls_back_to_none(tmp_path):
+    from src.config import load_schedules
+
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    # Half-written YAML, as a process killed mid-rewrite might leave behind.
+    (cfg / "schedules.yaml").write_text("schedules:\n  nightly:\n    cron: \"0 2 * *", encoding="utf-8")
+    assert load_schedules(cfg) == {}
