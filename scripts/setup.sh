@@ -137,6 +137,27 @@ if [ ! -f config/ssh/known_hosts ]; then
 else
     success "known_hosts exists"
 fi
+# The container mounts config/ssh at /root/.ssh read-only. OpenSSH's default
+# UpdateHostKeys=yes tries to rewrite known_hosts after each connection and
+# fails noisily on the ro mount. Pin the settings so ssh never attempts a
+# write while still verifying against the host key we pinned above. Paths are
+# the in-container locations (/root/.ssh), not the host ./config/ssh paths.
+if [ ! -f config/ssh/config ]; then
+    cat > config/ssh/config <<'EOF'
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile /root/.ssh/id_ed25519
+    IdentitiesOnly yes
+    UserKnownHostsFile /root/.ssh/known_hosts
+    StrictHostKeyChecking yes
+    UpdateHostKeys no
+EOF
+    chmod 600 config/ssh/config
+    success "Wrote ssh config (UpdateHostKeys off for ro mount)"
+else
+    success "ssh config exists"
+fi
 
 # Iterate over enabled parliaments — read git_remote + entity_dump_url from
 # Conductor config + Tools manifest, clone Data repos and download entity dumps.
