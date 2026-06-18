@@ -1,9 +1,10 @@
 """Aggregate stats per parliament for index + landing pages.
 
 All fields are cheap by construction: session counts come from directory
-listings, date ranges from header-reads of only the first and last
-session per period. A 120 s TTL cache fronts `overview()` so repeat
-hits on the index/landing pages don't re-open the same files.
+listings, date ranges from header-reads of only the first/last session of
+each numbering-scheme bucket per period (see `period_date_span`). A 120 s
+TTL cache fronts `overview()` so repeat hits on the index/landing pages
+don't re-open the same files.
 """
 
 from __future__ import annotations

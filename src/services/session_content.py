@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 _META_DATE_RE = re.compile(r'"dateStart"\s*:\s*"([0-9T:+\-]+)"')
 _META_DATE_END_RE = re.compile(r'"dateEnd"\s*:\s*"([0-9T:+\-]+)"')
+# A well-formed ISO date prefix (YYYY-MM-DD). Some source sessions carry
+# malformed dates (e.g. DE period 18's "02014T09:00:00"); these must not
+# participate in min/max span comparisons or they win lexicographically.
+_ISO_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
 _PROCESSING_BLOCK_RE = re.compile(r'"processing"\s*:\s*\{(?P<body>[^{}]*)\}', re.DOTALL)
 _PROCESSING_KEY_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*)"\s*:')
 _DATA_NONEMPTY_RE = re.compile(r'"data"\s*:\s*\[\s*\{')
@@ -420,9 +424,17 @@ class SessionContentService:
     ) -> tuple[str | None, str | None, int]:
         """Return (earliest dateStart, latest dateEnd, session count) for a period.
 
-        Header-reads only the first and last session by ID sort (session IDs
-        encode period + index, so lexicographic sort matches chronological).
-        2 header reads per period total. Cached 120 s.
+        Session indices count up chronologically *within* a numbering scheme,
+        but special sessions use out-of-band blocks (e.g. DE's 8xx/9xx) that
+        break a single global ID sort — so the lexicographically last session
+        is not necessarily the chronologically last one. We bucket sessions by
+        the hundreds digit of their index (each scheme lands in its own
+        bucket), then header-read only the first and last session of each
+        bucket: the chronological extremes live at those boundaries. A handful
+        of reads per period instead of all N. Cached 120 s.
+
+        The `_ISO_DATE_RE` guard drops malformed source dates (e.g. DE period
+        18's "02014T...") so they can't win a min/max comparison.
         """
         key = (parliament_id, period)
         now = time.time()
@@ -432,15 +444,32 @@ class SessionContentService:
                 return cached[1]
 
         config = _parliament_config(parliament_id, parliament)
-        sessions = sorted(config.sessions(prefix=str(period)))
-        if not sessions:
-            result: tuple[str | None, str | None, int] = (None, None, 0)
-        else:
-            first_path = config.file(sessions[0], "processed")
-            last_path = config.file(sessions[-1], "processed")
-            ds, _ = _extract_meta_dates(first_path) if first_path.exists() else (None, None)
-            _, de = _extract_meta_dates(last_path) if last_path.exists() else (None, None)
-            result = (ds, de, len(sessions))
+        sessions = config.sessions(prefix=str(period))
+        prefix = str(period)
+        buckets: dict[int, list[tuple[int, str]]] = {}
+        for sid in sessions:
+            tail = sid[len(prefix):]
+            idx = int(tail) if tail.isdigit() else 0
+            buckets.setdefault(idx // 100, []).append((idx, sid))
+
+        candidates: set[str] = set()
+        for group in buckets.values():
+            group.sort()
+            candidates.add(group[0][1])
+            candidates.add(group[-1][1])
+
+        earliest: str | None = None
+        latest: str | None = None
+        for sid in candidates:
+            path = config.file(sid, "processed")
+            if not path.exists():
+                continue
+            ds, de = _extract_meta_dates(path)
+            if ds and _ISO_DATE_RE.match(ds) and (earliest is None or ds < earliest):
+                earliest = ds
+            if de and _ISO_DATE_RE.match(de) and (latest is None or de > latest):
+                latest = de
+        result: tuple[str | None, str | None, int] = (earliest, latest, len(sessions))
         with self._lock:
             self._period_span_cache[key] = (time.time(), result)
         return result
