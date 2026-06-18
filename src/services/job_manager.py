@@ -156,6 +156,21 @@ class JobManager:
                 return False
         return False
 
+    def active_schedule_ids(self) -> set[str]:
+        """schedule_ids of jobs currently running or still queued.
+
+        Used by the scheduler to coalesce: a recurring cron must not pile up
+        a fresh job each firing while its previous run is still in flight.
+        """
+        ids: set[str] = set()
+        current = self._read(self.current_file)
+        if current and current.get("schedule_id"):
+            ids.add(current["schedule_id"])
+        for entry in self._read(self.queue_file) or []:
+            if entry.get("schedule_id"):
+                ids.add(entry["schedule_id"])
+        return ids
+
     def list_queue(self) -> list[dict[str, Any]]:
         return self._read(self.queue_file) or []
 

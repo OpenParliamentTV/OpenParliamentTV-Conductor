@@ -105,6 +105,49 @@ def test_trigger_now_enqueues_job(tmp_path):
     assert queue[0]["publish_on_success"] is True
 
 
+def test_scheduled_enqueue_coalesces_while_active(tmp_path):
+    schedules = {
+        "a": ScheduleConfig(enabled=True, parliament="DE", cron="*/5 * * * *", stages=["merge"]),
+    }
+    app_config = _make_config(tmp_path, schedules)
+    (tmp_path / "status").mkdir()
+    jm = JobManager(tmp_path / "status")
+    svc = SchedulerService(app_config, jm)
+    # First firing enqueues; repeated firings while it's still queued are skipped.
+    svc._enqueue_scheduled("a")
+    svc._enqueue_scheduled("a")
+    svc._enqueue_scheduled("a")
+    assert len(jm.list_queue()) == 1
+
+
+def test_scheduled_enqueue_coalesces_against_running_job(tmp_path):
+    schedules = {
+        "a": ScheduleConfig(enabled=True, parliament="DE", cron="*/5 * * * *", stages=["merge"]),
+    }
+    app_config = _make_config(tmp_path, schedules)
+    (tmp_path / "status").mkdir()
+    jm = JobManager(tmp_path / "status")
+    svc = SchedulerService(app_config, jm)
+    svc._enqueue_scheduled("a")
+    jm.dequeue()  # move it to current/running, queue now empty
+    assert jm.list_queue() == []
+    svc._enqueue_scheduled("a")  # should skip — same schedule is running
+    assert jm.list_queue() == []
+
+
+def test_trigger_now_bypasses_coalesce(tmp_path):
+    schedules = {
+        "a": ScheduleConfig(enabled=True, parliament="DE", cron="*/5 * * * *", stages=["merge"]),
+    }
+    app_config = _make_config(tmp_path, schedules)
+    (tmp_path / "status").mkdir()
+    jm = JobManager(tmp_path / "status")
+    svc = SchedulerService(app_config, jm)
+    svc._enqueue_scheduled("a")
+    assert svc.trigger_now("a") is True  # operator override still enqueues
+    assert len(jm.list_queue()) == 2
+
+
 def test_trigger_now_unknown_returns_false(tmp_path):
     app_config = _make_config(tmp_path, {})
     (tmp_path / "status").mkdir()

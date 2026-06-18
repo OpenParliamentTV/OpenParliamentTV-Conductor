@@ -36,9 +36,15 @@ class SchedulerService:
         self.scheduler = AsyncIOScheduler()
         self._watcher_task: asyncio.Task | None = None
 
-    def _enqueue_scheduled(self, schedule_id: str) -> None:
+    def _enqueue_scheduled(self, schedule_id: str, *, coalesce: bool = True) -> None:
         sched = self.config.schedules.get(schedule_id)
         if not sched or not sched.enabled:
+            return
+        if coalesce and schedule_id in self.job_manager.active_schedule_ids():
+            logger.info(
+                "Skipping scheduled job %s — previous run still queued/running",
+                schedule_id,
+            )
             return
         job = Job.new(
             parliament=sched.parliament,
@@ -129,5 +135,5 @@ class SchedulerService:
     def trigger_now(self, schedule_id: str) -> bool:
         if schedule_id not in self.config.schedules:
             return False
-        self._enqueue_scheduled(schedule_id)
+        self._enqueue_scheduled(schedule_id, coalesce=False)
         return True
