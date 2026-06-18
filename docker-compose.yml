@@ -43,7 +43,9 @@ services:
     restart: unless-stopped
     profiles: [production]
     volumes:
-      - ./nginx:/etc/nginx:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/config:/etc/nginx/config:ro
     ports:
       - "80:80"
       - "443:443"
