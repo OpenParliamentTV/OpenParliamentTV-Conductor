@@ -342,17 +342,20 @@ class WorkflowRunner:
             argv.append("--merge-speeches")
         if "align" in stage_set:
             argv.append("--align-sentences")
+        # Refresh the entity registry on every job, independent of the `nel`
+        # stage. `--update-nel-entities` is its own stage in Tools' workflow.py
+        # (decoupled from `--link-entities`), so it runs even for download/parse/
+        # align-only jobs. This restores legacy `optv pull` semantics, where the
+        # cron re-fetched the entity dump unconditionally so a platform-side
+        # registry change propagates without waiting for a nel job. workflow.py
+        # downloads the dump (from `--nel-entity-url`, else the Tools manifest
+        # `entity_dump_url`) into metadata/entities.json; the publish step commits
+        # it. No-ops with a warning if no entity URL is configured.
+        argv.append("--update-nel-entities")
+        if parliament.entity_dump_url:
+            argv.append(f"--nel-entity-url={parliament.entity_dump_url}")
         if "nel" in stage_set:
             argv.append("--link-entities")
-            # Refresh the entity registry before linking, so a platform-side
-            # registry change propagates without manual intervention. Legacy
-            # `optv pull` did this via curl; the Conductor must request it
-            # explicitly. `workflow.py` downloads the dump (from `--nel-entity-url`
-            # below, else the Tools manifest `entity_dump_url`) into
-            # metadata/entities.json, and the publish step commits it.
-            argv.append("--update-nel-entities")
-            if parliament.entity_dump_url:
-                argv.append(f"--nel-entity-url={parliament.entity_dump_url}")
         if "ner" in stage_set:
             argv.append("--extract-entities")
         return argv

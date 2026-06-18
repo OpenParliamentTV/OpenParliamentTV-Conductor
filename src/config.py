@@ -25,6 +25,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+# Synthetic identity used for every request when AUTH_ENABLED is false. Copy it
+# (dict(ANONYMOUS_ADMIN)) before handing it to a request so callers can't mutate
+# the shared instance.
+ANONYMOUS_ADMIN = {"username": "local-admin", "role": "admin", "avatar_url": None}
+
 
 class Settings(BaseSettings):
     """Environment-backed secrets and paths."""
@@ -34,6 +39,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    # Master switch for GitHub auth. When false, login is bypassed entirely and
+    # every request is treated as ANONYMOUS_ADMIN — no OAuth creds, JWT secret,
+    # or users.yaml are required. Read once at startup; restart to change.
+    auth_enabled: bool = Field(default=True, alias="AUTH_ENABLED")
 
     github_client_id: str = Field(default="", alias="GITHUB_CLIENT_ID")
     github_client_secret: str = Field(default="", alias="GITHUB_CLIENT_SECRET")
@@ -271,13 +281,19 @@ class AppConfig:
         self.notifications = load_notifications(self.config_dir)
 
     def validate_startup(self) -> None:
-        self.settings.require("github_client_id", "github_client_secret", "jwt_secret")
+        if self.settings.auth_enabled:
+            self.settings.require("github_client_id", "github_client_secret", "jwt_secret")
+        else:
+            logger.warning(
+                "AUTH_ENABLED is false — GitHub login is bypassed and every request "
+                "has admin access. Anyone who can reach this server controls it."
+            )
         if not self.parliaments:
             raise RuntimeError(
                 f"No parliaments configured. Copy "
                 f"{self.config_dir}/parliaments.yaml.sample to parliaments.yaml."
             )
-        if not self.users:
+        if self.settings.auth_enabled and not self.users:
             raise RuntimeError(
                 f"No authorized users configured. Copy "
                 f"{self.config_dir}/users.yaml.sample to users.yaml and add your GitHub username."

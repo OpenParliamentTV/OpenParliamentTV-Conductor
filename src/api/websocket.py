@@ -21,10 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 def _authorize(websocket: WebSocket) -> str | None:
+    config = get_config()
+    if not config.settings.auth_enabled:
+        return "local-admin"
     token = websocket.cookies.get("optv_token")
     if not token:
         return None
-    config = get_config()
     try:
         payload = app_jwt.decode(config.settings.jwt_secret, token)
     except Exception:

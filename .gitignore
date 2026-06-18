@@ -54,6 +54,7 @@ nginx/ssl/*.crt
 # ===================
 status/
 !status/.gitkeep
+.self-update.lock
 
 # ===================
 # Data Directory (single mount)

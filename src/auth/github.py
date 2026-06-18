@@ -45,6 +45,8 @@ def _oauth_client(config: AppConfig) -> OAuth:
 
 @router.get("/login")
 async def login(request: Request, config: AppConfig = Depends(get_config)):
+    if not config.settings.auth_enabled:
+        return RedirectResponse(url="/", status_code=302)
     redirect_uri = f"{config.settings.base_url.rstrip('/')}/auth/callback"
     return await _oauth_client(config).github.authorize_redirect(request, redirect_uri)
 

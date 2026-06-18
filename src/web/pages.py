@@ -25,7 +25,7 @@ from fastapi.templating import Jinja2Templates
 
 from src.auth import jwt as app_jwt
 from src.auth.dependencies import ROLE_RANK
-from src.config import AppConfig, ParliamentConfig, get_config
+from src.config import ANONYMOUS_ADMIN, AppConfig, ParliamentConfig, get_config
 from src.services.job_manager import Job, JobManager
 from src.services.parliament_stats import get_parliament_stats
 from src.services.registry import get_job_manager
@@ -40,6 +40,8 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent
 
 
 def _user_from_cookie(token: str | None, config: AppConfig) -> dict | None:
+    if not config.settings.auth_enabled:
+        return dict(ANONYMOUS_ADMIN)
     if not token:
         return None
     try:
@@ -90,6 +92,7 @@ def _nav_ctx(
         "active_section": active_section,
         "active_sub": active_sub,
         "parliament": parliament,
+        "auth_enabled": config.settings.auth_enabled,
     }
 
 
@@ -114,7 +117,11 @@ async def login_page(
 ):
     if _user_from_cookie(token, config):
         return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse(request, "login.html", {"user": None})
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"user": None, "auth_enabled": config.settings.auth_enabled},
+    )
 
 
 @router.get("/dashboard", response_class=HTMLResponse)

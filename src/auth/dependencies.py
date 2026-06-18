@@ -8,7 +8,7 @@ from fastapi import Cookie, Depends, HTTPException, status
 import jwt as pyjwt
 
 from src.auth import jwt as app_jwt
-from src.config import AppConfig, get_config
+from src.config import ANONYMOUS_ADMIN, AppConfig, get_config
 
 COOKIE_NAME = "optv_token"
 
@@ -19,6 +19,8 @@ def current_user(
     token: str | None = Cookie(default=None, alias=COOKIE_NAME),
     config: AppConfig = Depends(get_config),
 ) -> dict:
+    if not config.settings.auth_enabled:
+        return dict(ANONYMOUS_ADMIN)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
     try:

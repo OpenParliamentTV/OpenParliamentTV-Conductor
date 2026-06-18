@@ -52,6 +52,57 @@ users:
     yield
 
 
+@pytest.fixture
+def auth_disabled_app(tmp_path, monkeypatch):
+    """Like loaded_app but AUTH_ENABLED=false, no OAuth creds, no users.yaml."""
+    cfg = tmp_path / "config"
+    status = tmp_path / "status"
+    cfg.mkdir()
+    status.mkdir()
+    (cfg / "parliaments.yaml").write_text(
+        """
+parliaments:
+  DE:
+    name: Bundestag
+    language: deu
+    tools_dir: /tmp/tools
+    data_dir: /tmp/data
+    current_period: 21
+    periods: [21]
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("STATUS_DIR", str(status))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    # Deliberately leave GITHUB_CLIENT_ID/SECRET/JWT_SECRET unset.
+    monkeypatch.delenv("GITHUB_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GITHUB_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+
+    for m in [m for m in list(sys.modules) if m.startswith("src.")]:
+        sys.modules.pop(m, None)
+
+    yield
+
+
+def test_current_user_returns_admin_when_auth_disabled(auth_disabled_app):
+    from src.auth.dependencies import current_user
+    from src.config import get_config
+
+    user = current_user(token=None, config=get_config())
+    assert user["role"] == "admin"
+    assert user["username"] == "local-admin"
+
+
+def test_validate_startup_passes_without_creds_when_auth_disabled(auth_disabled_app):
+    from src.config import get_config
+
+    # No GitHub creds, no JWT secret, no users.yaml — must still validate.
+    get_config().validate_startup()
+
+
 def _make_token(role_user: str) -> str:
     from src.auth import jwt as app_jwt
 

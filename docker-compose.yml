@@ -51,11 +51,12 @@ services:
     depends_on:
       - app
 
-  # Optional: Entity-fishing for NER (German). Working set ~3-4GB.
+  # Optional: Entity-fishing for NER. Working set ~3-4GB per loaded language.
   # The amd64 image runs under Rosetta on Apple Silicon (functional, slower).
   # The knowledge base is bind-mounted from ./data/entity-fishing-db/ on the
-  # host — download db-kb (Wikidata) + db-en (English, mandatory pivot) +
-  # db-de (German) from the sciencialab HuggingFace org into that dir first.
+  # host — download db-kb (Wikidata) + db-en (English, mandatory pivot) plus
+  # one db-<lang> per supported parliament language from the sciencialab
+  # HuggingFace org into that dir first.
   entity-fishing:
     image: grobid/entity-fishing:0.0.6
     platform: linux/amd64
@@ -68,6 +69,11 @@ services:
       - ./data/entity-fishing-db/db-kb:/opt/entity-fishing/data/db/db-kb
       - ./data/entity-fishing-db/db-en:/opt/entity-fishing/data/db/db-en
       - ./data/entity-fishing-db/db-de:/opt/entity-fishing/data/db/db-de
+      - ./data/entity-fishing-db/db-es:/opt/entity-fishing/data/db/db-es
+      - ./data/entity-fishing-db/db-fr:/opt/entity-fishing/data/db/db-fr
+      - ./data/entity-fishing-db/db-pt:/opt/entity-fishing/data/db/db-pt
+      - ./data/entity-fishing-db/db-sv:/opt/entity-fishing/data/db/db-sv
+      - ./data/entity-fishing-db/db-zh:/opt/entity-fishing/data/db/db-zh
     deploy:
       resources:
         limits:

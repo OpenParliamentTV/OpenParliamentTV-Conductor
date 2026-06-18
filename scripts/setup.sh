@@ -20,6 +20,21 @@ success() { echo -e "${GREEN}✓${NC} $1"; }
 warning() { echo -e "${YELLOW}!${NC} $1"; }
 error() { echo -e "${RED}✗${NC} $1"; exit 1; }
 
+# set_env KEY VALUE — set KEY=VALUE in config/secrets.env, replacing an existing
+# line or appending if absent. Portable across BSD (macOS) and GNU sed.
+set_env() {
+    local key="$1" value="$2"
+    if grep -q "^${key}=" config/secrets.env 2>/dev/null; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s|^${key}=.*|${key}=${value}|" config/secrets.env
+        else
+            sed -i "s|^${key}=.*|${key}=${value}|" config/secrets.env
+        fi
+    else
+        echo "${key}=${value}" >> config/secrets.env
+    fi
+}
+
 echo "========================================"
 echo "OpenParliamentTV-Conductor Setup"
 echo "========================================"
@@ -76,8 +91,24 @@ copy_sample config/users.yaml.sample config/users.yaml
 copy_sample config/schedules.yaml.sample config/schedules.yaml
 copy_sample config/notifications.yaml.sample config/notifications.yaml
 
-# Generate JWT secret if empty
-if grep -q "^JWT_SECRET=$" config/secrets.env 2>/dev/null; then
+# GitHub authentication: enabled by default. Declining bypasses login entirely —
+# every request gets admin access, and the OAuth/JWT/users.yaml steps are skipped.
+echo ""
+AUTH_ENABLED=true
+read -r -p "Enable GitHub authentication? [Y/n] " _auth_reply
+case "$_auth_reply" in
+    [Nn]*) AUTH_ENABLED=false ;;
+esac
+if [ "$AUTH_ENABLED" = false ]; then
+    set_env AUTH_ENABLED false
+    warning "GitHub auth DISABLED — anyone who can reach this server has admin access"
+else
+    set_env AUTH_ENABLED true
+    success "GitHub auth enabled"
+fi
+
+# Generate JWT secret if empty (only needed when auth is enabled)
+if [ "$AUTH_ENABLED" = true ] && grep -q "^JWT_SECRET=$" config/secrets.env 2>/dev/null; then
     JWT_SECRET=$(openssl rand -hex 32)
     if [[ "$OSTYPE" == "darwin"* ]]; then
         sed -i '' "s/^JWT_SECRET=$/JWT_SECRET=$JWT_SECRET/" config/secrets.env
@@ -206,27 +237,43 @@ PY
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Create GitHub OAuth App:"
-echo "   https://github.com/settings/developers"
-echo "   Callback: http://localhost:8000/auth/callback"
-echo ""
-echo "2. Edit config/secrets.env:"
-echo "   - GITHUB_CLIENT_ID"
-echo "   - GITHUB_CLIENT_SECRET"
+_step=1
+if [ "$AUTH_ENABLED" = true ]; then
+    echo "$_step. Create GitHub OAuth App:"
+    echo "   https://github.com/settings/developers"
+    echo "   Callback: http://localhost:8000/auth/callback"
+    echo ""
+    _step=$((_step + 1))
+fi
+echo "$_step. Edit config/secrets.env:"
+if [ "$AUTH_ENABLED" = true ]; then
+    echo "   - GITHUB_CLIENT_ID"
+    echo "   - GITHUB_CLIENT_SECRET"
+fi
 echo "   - BASE_URL"
 echo "   - GIT_USER_NAME / GIT_USER_EMAIL (publish-step git identity)"
 echo ""
-echo "3. Edit config/users.yaml:"
-echo "   Add your GitHub username"
-echo ""
-echo "4. Add the deploy key shown above to each Data repo, then re-run"
+_step=$((_step + 1))
+if [ "$AUTH_ENABLED" = true ]; then
+    echo "$_step. Edit config/users.yaml:"
+    echo "   Add your GitHub username"
+    echo ""
+    _step=$((_step + 1))
+else
+    warning "Auth is DISABLED — the UI requires no login and every visitor has admin access."
+    echo ""
+fi
+echo "$_step. Add the deploy key shown above to each Data repo, then re-run"
 echo "   ./scripts/setup.sh if any Data clones failed."
 echo ""
-echo "5. Start the application:"
+_step=$((_step + 1))
+echo "$_step. Start the application:"
 echo "   docker compose up -d"
 echo ""
 
 # Warnings for missing config
-grep -q "^GITHUB_CLIENT_ID=$" config/secrets.env && warning "Configure GITHUB_CLIENT_ID"
-grep -q "^GITHUB_CLIENT_SECRET=$" config/secrets.env && warning "Configure GITHUB_CLIENT_SECRET"
+if [ "$AUTH_ENABLED" = true ]; then
+    grep -q "^GITHUB_CLIENT_ID=$" config/secrets.env && warning "Configure GITHUB_CLIENT_ID"
+    grep -q "^GITHUB_CLIENT_SECRET=$" config/secrets.env && warning "Configure GITHUB_CLIENT_SECRET"
+fi
 grep -q "^BASE_URL=$" config/secrets.env && warning "Configure BASE_URL"

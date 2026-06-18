@@ -88,6 +88,8 @@ def _write_fake_workflow_script(tools_dir: Path) -> None:
         parser.add_argument("--merge-speeches", action="store_true")
         parser.add_argument("--align-sentences", action="store_true")
         parser.add_argument("--link-entities", action="store_true")
+        parser.add_argument("--update-nel-entities", action="store_true")
+        parser.add_argument("--nel-entity-url", default="")
         parser.add_argument("--extract-entities", action="store_true")
         args = parser.parse_args()
         for s in ["21001", "21002", "21003"]:
@@ -185,10 +187,11 @@ def test_build_argv_limit_to_period_depends_on_session_filter(tmp_path):
     assert "--limit-to-period" not in argv
 
 
-def test_build_argv_nel_stage_refreshes_entity_registry(tmp_path):
-    """The nel stage must also request an entity-dump refresh, restoring the
-    behaviour legacy `optv pull` had via curl. Without it, a platform-side
-    registry change never reaches the pipeline."""
+def test_build_argv_refreshes_entity_registry_every_job(tmp_path):
+    """Every job requests an entity-dump refresh, independent of the nel stage,
+    restoring the behaviour legacy `optv pull` had via curl (it re-fetched the
+    dump unconditionally). `--update-nel-entities` is its own Tools stage,
+    decoupled from `--link-entities`."""
     tools_dir = tmp_path / "tools"
     data_dir = tmp_path / "data"
     app_config = _make_app_config(tmp_path, tools_dir, data_dir)
@@ -203,8 +206,10 @@ def test_build_argv_nel_stage_refreshes_entity_registry(tmp_path):
     # No override configured -> workflow falls back to the Tools manifest URL.
     assert not any(a.startswith("--nel-entity-url=") for a in argv)
 
-    # A non-nel job must not trigger the (network) refresh.
-    assert "--update-nel-entities" not in runner._build_argv(job, parliament, ["ner"])
+    # A non-nel job still refreshes the registry, but does not link entities.
+    download_only = runner._build_argv(job, parliament, ["download"])
+    assert "--update-nel-entities" in download_only
+    assert "--link-entities" not in download_only
 
     # A configured override is passed through to workflow.py.
     parliament.entity_dump_url = "https://example.org/dump.json"
