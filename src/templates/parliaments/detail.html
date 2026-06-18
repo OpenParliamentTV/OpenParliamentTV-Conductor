@@ -46,9 +46,9 @@
   <section>
     <h2 class="text-sm font-semibold text-slate-700 mb-2">Date range</h2>
     <div class="text-sm">
-      {% if overview.date_start %}{{ overview.date_start[:10] }}{% else %}—{% endif %}
+      {{ overview.date_start | humandate(with_time=False) }}
       →
-      {% if overview.date_end %}{{ overview.date_end[:10] }}{% else %}—{% endif %}
+      {{ overview.date_end | humandate(with_time=False) }}
     </div>
   </section>
 
@@ -75,8 +75,8 @@
               <a href="/parliaments/{{ overview.id }}/sessions?period={{ ps.period }}"
                  class="text-blue-700 hover:underline">{{ ps.session_count }}</a>
             </td>
-            <td class="px-3 py-2 text-xs">{% if ps.date_start %}{{ ps.date_start[:10] }}{% else %}—{% endif %}</td>
-            <td class="px-3 py-2 text-xs">{% if ps.date_end %}{{ ps.date_end[:10] }}{% else %}—{% endif %}</td>
+            <td class="px-3 py-2 text-xs">{{ ps.date_start | humandate(with_time=False) }}</td>
+            <td class="px-3 py-2 text-xs">{{ ps.date_end | humandate(with_time=False) }}</td>
           </tr>
           {% endfor %}
         </tbody>

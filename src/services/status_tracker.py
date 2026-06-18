@@ -18,8 +18,9 @@ from src.config import ParliamentConfig
 
 # Maps UI stage → set of keys in `meta.processing` that indicate the
 # stage has run. A stage is "complete" if ANY of the listed keys is
-# present. `download` is the odd one out — it's derived from the media
-# file existing, not from a processing timestamp.
+# present. `download` is the odd one out — it has no `meta.processing`
+# entry, so it's inferred from the media file existing OR from
+# downstream evidence (see `_DOWNLOAD_EVIDENCE`).
 _CHEAP_PROCESSING_STAGES: dict[str, tuple[str, ...]] = {
     "parse": ("parse_media", "parse_proceedings"),
     "merge": ("merge",),
@@ -27,6 +28,14 @@ _CHEAP_PROCESSING_STAGES: dict[str, tuple[str, ...]] = {
     "align": ("align",),
     "ner": ("ner",),
 }
+
+# Downstream stages whose presence proves a download happened: you can't
+# parse media or merge data you never downloaded. Needed because the
+# media file (`original/media/<session>-media.json`) is a transient,
+# gitignored artifact — absent after cleanup or in a fresh checkout —
+# so checking only for it falsely reports completed downloads as
+# "never_run" while parse/merge stay green.
+_DOWNLOAD_EVIDENCE: tuple[str, ...] = ("parse_media", "merge", "parse_proceedings")
 
 
 class StatusTracker:
@@ -54,9 +63,12 @@ class StatusTracker:
         so sessions processed by older Tools versions — which wrote sparse
         meta.processing blocks — still report what actually ran. One
         16 KB header read per session, cached 60 s. The `download` stage
-        comes from media file existence because it has no
-        `meta.processing` entry. Returns `{stage: "complete"|"never_run"}`
-        for download + parse + merge + nel + align + ner.
+        has no `meta.processing` entry, so it's inferred from the media
+        file existing OR downstream evidence (`_DOWNLOAD_EVIDENCE`) —
+        media can't be parsed/merged unless it was downloaded, and the
+        media file itself is transient/gitignored. Returns
+        `{stage: "complete"|"never_run"}` for download + parse + merge +
+        nel + align + ner.
         """
         key = (parliament_id, session)
         now = time.time()
@@ -72,8 +84,11 @@ class StatusTracker:
         module = importlib.import_module(f"optv.parliaments.{parliament_id}.common")
         config = module.Config(Path(parliament.data_dir))
 
+        download_done = config.file(session, "media").exists() or any(
+            k in stages_present for k in _DOWNLOAD_EVIDENCE
+        )
         result: dict[str, str] = {
-            "download": "complete" if config.file(session, "media").exists() else "never_run",
+            "download": "complete" if download_done else "never_run",
         }
         for stage, keys in _CHEAP_PROCESSING_STAGES.items():
             result[stage] = "complete" if any(k in stages_present for k in keys) else "never_run"

@@ -38,12 +38,14 @@ from src.services.parliament_stats import get_parliament_stats
 from src.services.registry import get_job_manager
 from src.services.session_content import get_session_content
 from src.services.status_tracker import get_tracker
+from src.web import filters
 
 COOKIE_NAME = "optv_token"
 
 router = APIRouter(tags=["pages"], include_in_schema=False)
 
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
+filters.register(templates.env)
 
 
 def _user_from_cookie(token: str | None, config: AppConfig) -> dict | None:

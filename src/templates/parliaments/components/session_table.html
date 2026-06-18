@@ -79,7 +79,7 @@
            class="text-blue-700 hover:underline">{{ row.id }}</a>
       </td>
       <td class="px-3 py-2 text-xs text-slate-600">
-        {% if row.date_start %}{{ row.date_start[:10] }}{% else %}—{% endif %}
+        {{ row.date_start | humandate(with_time=False) }}
       </td>
       {% for s in stage_list %}
       {% set st = row.status.get(s, 'never_run') %}

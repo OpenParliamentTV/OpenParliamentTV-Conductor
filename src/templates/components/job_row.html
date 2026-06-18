@@ -7,7 +7,8 @@
     </div>
     <div class="text-xs text-slate-500">
       {{ job.id[:8] }} · {{ job.source }}{% if job.schedule_id %} ({{ job.schedule_id }}){% endif %}
-      · {{ job.finished_at or job.started_at or job.created_at }}
+      {% set ts = job.finished_at or job.started_at or job.created_at %}
+      · {{ ts | humandate }} · {{ ts | timeago }}
     </div>
   </div>
   <span class="text-xs px-2 py-1 rounded ml-3

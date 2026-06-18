@@ -9,8 +9,8 @@
          class="text-xs text-blue-600 hover:underline">← all sessions</a>
       <h1 class="text-xl font-semibold font-mono mt-1">{{ summary.id }}</h1>
       <div class="text-sm text-slate-600 mt-1">
-        {% if summary.date_start %}{{ summary.date_start }}{% endif %}
-        {% if summary.date_end %} → {{ summary.date_end }}{% endif %}
+        {% if summary.date_start %}{{ summary.date_start | humandate }}{% endif %}
+        {% if summary.date_end %} → {% if summary.date_start | same_day(summary.date_end) %}{{ summary.date_end | humantime }}{% else %}{{ summary.date_end | humandate }}{% endif %}{% endif %}
         {% if summary.duration_seconds %}
           · {{ (summary.duration_seconds // 3600) }}h {{ ((summary.duration_seconds % 3600) // 60) }}m
         {% endif %}

@@ -10,7 +10,7 @@
       {% if s.publish_on_success %} · publish{% endif %}
     </div>
     {% if s.description %}<div class="text-xs text-slate-600 mt-1">{{ s.description }}</div>{% endif %}
-    {% if s.next_run %}<div class="text-xs text-slate-500">next: {{ s.next_run }}</div>{% endif %}
+    {% if s.next_run %}<div class="text-xs text-slate-500">next: {{ s.next_run | humandate }} ({{ s.next_run | timeago }})</div>{% endif %}
   </div>
   <div class="flex items-center gap-3">
     {% if s.enabled %}

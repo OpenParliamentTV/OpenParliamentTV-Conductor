@@ -34,7 +34,7 @@
           <dt class="text-slate-500">Last job</dt>
           <dd>
             {% if c.last_job %}
-              <span class="text-xs">{{ c.last_job.status }} · {{ (c.last_job.finished_at or "")[:10] }}</span>
+              <span class="text-xs">{{ c.last_job.status }} · {{ c.last_job.finished_at | humandate(with_time=False) }}</span>
             {% else %}
               <span class="text-slate-400">—</span>
             {% endif %}
