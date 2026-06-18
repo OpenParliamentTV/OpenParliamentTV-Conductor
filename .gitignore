@@ -48,6 +48,8 @@ nginx/ssl/*.pem
 nginx/ssl/*.key
 nginx/ssl/*.crt
 !nginx/ssl/.gitkeep
+nginx/config/*
+!nginx/config/.gitkeep
 
 # ===================
 # Runtime State
