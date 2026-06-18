@@ -90,6 +90,7 @@ status/         # file-backed queue, current job, history, log files (gitignored
 data/           # cloned Tools + Data-* repos (gitignored)
 scripts/        # setup.sh, backup.sh, compat_check.sh
 nginx/          # reverse proxy config + ssl/ (mount real certs here for prod)
+                # config/*.conf — drop-in server-block snippets (gitignored)
 tests/          # pytest
 optv            # legacy bash script — untouched
 ```
@@ -106,6 +107,13 @@ optv            # legacy bash script — untouched
   `status/logs/jobs/<id>.log`.
 - **Schedules**: edit `config/schedules.yaml` — changes hot-reload within
   seconds via `watchfiles`. The UI at `/schedules` also toggles/triggers.
+- **Custom nginx config** (production profile only): drop `*.conf` files into
+  `nginx/config/` and they're `include`d into the nginx `server` block (the
+  dir is bind-mounted read-only into the nginx container). Use this for extra
+  `location` blocks, headers, redirects, etc. without touching the tracked
+  `nginx/nginx.conf`. The whole directory is gitignored (only `.gitkeep` is
+  tracked), so your overrides stay local. Reload with
+  `docker compose --profile production restart nginx` after editing.
 
 ## Troubleshooting
 
