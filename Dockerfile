@@ -6,6 +6,7 @@ WORKDIR /app
 # ffmpeg for audio).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    openssh-client \
     curl \
     ffmpeg \
     espeak \
