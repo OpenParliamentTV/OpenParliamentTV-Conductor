@@ -11,6 +11,9 @@
   <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
+  <div id="global-progress"
+       class="fixed top-0 left-0 h-0.5 bg-blue-500 z-[100] w-0 opacity-0 pointer-events-none"
+       aria-hidden="true"></div>
   {% if user %}
   {% set active = active_section|default("") %}
   <header class="bg-white border-b border-slate-200">

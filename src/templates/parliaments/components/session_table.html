@@ -70,11 +70,14 @@
   <tbody class="divide-y divide-slate-100" id="session-rows">
 {% endif %}
     {% for row in rows %}
-    <tr>
-      <td class="px-3 py-2 text-center sticky left-0 z-10 bg-white">
+    {% set row_active = "$store.job && $store.job.active && $store.job.parliament==='" ~ parliament.id ~ "' && $store.job.current_session==='" ~ row.id ~ "'" %}
+    <tr :class="({{ row_active }}) ? 'bg-blue-50' : ''">
+      <td class="px-3 py-2 text-center sticky left-0 z-10"
+          :class="({{ row_active }}) ? 'bg-blue-50' : 'bg-white'">
         <input type="checkbox" :value="'{{ row.id }}'" :data-row-id="'{{ row.id }}'" x-model="selected" />
       </td>
-      <td class="px-3 py-2 font-mono sticky left-10 z-10 bg-white border-r border-slate-200">
+      <td class="px-3 py-2 font-mono sticky left-10 z-10 border-r border-slate-200"
+          :class="({{ row_active }}) ? 'bg-blue-50' : 'bg-white'">
         <a href="/parliaments/{{ parliament.id }}/sessions/{{ row.id }}"
            class="text-blue-700 hover:underline">{{ row.id }}</a>
       </td>
@@ -83,12 +86,31 @@
       </td>
       {% for s in stage_list %}
       {% set st = row.status.get(s, 'never_run') %}
+      {% set stage_active = row_active ~ " && $store.job.stage==='" ~ s ~ "'" %}
+      {% set srv = 'true' if st == 'complete' else 'false' %}
+      {% set just_done = "isDone('" ~ row.id ~ "','" ~ s ~ "'," ~ srv ~ ") && !" ~ srv %}
       <td class="px-2 py-2 text-center">
-        <span class="inline-block px-2 py-0.5 rounded text-[11px]
+        {# currently-running spinner #}
+        <span x-cloak x-show="{{ stage_active }}"
+              class="inline-flex items-center justify-center w-5 h-5 rounded text-blue-600"
+              title="currently running">
+          <svg class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+        </span>
+        {# server-rendered baseline (✓/–); hidden once a live refresh shows this
+           previously-incomplete stage has just finished #}
+        <span x-show="!({{ stage_active }}) && !({{ just_done }})"
+              class="inline-block px-2 py-0.5 rounded text-[11px]
           {% if st == 'complete' %}bg-green-100 text-green-800
           {% else %}bg-slate-50 text-slate-300{% endif %}">
           {% if st == 'complete' %}&#10003;{% else %}&ndash;{% endif %}
         </span>
+        {# live 'just completed' green tick — x-cloak so it never flashes on load #}
+        <span x-cloak x-show="!({{ stage_active }}) && ({{ just_done }})"
+              class="inline-block px-2 py-0.5 rounded text-[11px] bg-green-100 text-green-800"
+              title="{{ s }} just completed">&#10003;</span>
       </td>
       {% endfor %}
     </tr>

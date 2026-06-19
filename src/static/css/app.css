@@ -1,1 +1,10 @@
 [x-cloak] { display: none !important; }
+
+/* HTMX request indicators: any element with .htmx-indicator is hidden until
+   the request that targets it (or whose hx-indicator points at it) is in
+   flight, at which point htmx adds .htmx-request. Used for button spinners. */
+.htmx-indicator { opacity: 0; width: 0; overflow: hidden; transition: opacity 150ms ease-in; }
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator { opacity: 1; width: 1rem; }
+/* A submitting button (hx-disabled-elt) gets disabled by htmx; dim it. */
+button[disabled], .htmx-request > button[type="submit"] { cursor: not-allowed; }

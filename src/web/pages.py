@@ -14,13 +14,14 @@ match the catch-all first.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 
 import jwt as pyjwt
 from dataclasses import asdict
 from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from src.auth import jwt as app_jwt
@@ -161,10 +162,17 @@ async def dashboard_page(
     if not user:
         return RedirectResponse(url="/login", status_code=302)
     stats = get_parliament_stats()
-    cards = [
-        asdict(stats.overview(pid, p, config))
-        for pid, p in config.parliaments.items()
-    ]
+
+    def _build_cards() -> list[dict]:
+        # Scans each parliament's data dir for session counts — offloaded to a
+        # worker thread so a running job (or another heavy request) can't stall
+        # the event loop while this page renders.
+        return [
+            asdict(stats.overview(pid, p, config))
+            for pid, p in config.parliaments.items()
+        ]
+
+    cards = await asyncio.to_thread(_build_cards)
     ctx = _nav_ctx(user, config, active_section="dashboard")
     ctx["cards"] = cards
     return templates.TemplateResponse(request, "dashboard.html", ctx)
@@ -184,6 +192,35 @@ async def fragment_current(
         request, "components/job_card.html",
         {"job": current.to_dict() if current else None},
     )
+
+
+@router.get("/api/active")
+async def api_active(
+    token: str | None = Cookie(default=None, alias=COOKIE_NAME),
+    config: AppConfig = Depends(get_config),
+    jm: JobManager = Depends(get_job_manager),
+) -> JSONResponse:
+    """Tiny JSON snapshot of the in-progress job, polled by every live view.
+
+    Reads only `current.json` (a small, lock-free read), so it's cheap enough
+    to poll every couple of seconds from the dashboard, session list and
+    session detail to drive 'currently updating' indicators — without the
+    heavy per-session filesystem scans the full pages do.
+    """
+    _require_page_user(token, config)
+    current = jm.current()
+    if not current or current.status not in ("running", "cancelling"):
+        return JSONResponse({"active": False})
+    return JSONResponse({
+        "active": True,
+        "job_id": current.id,
+        "parliament": current.parliament,
+        "status": current.status,
+        "stage": current.stage,
+        "current_session": current.current_session,
+        "sessions_completed": current.sessions_completed,
+        "sessions_total": current.sessions_total,
+    })
 
 
 @router.get("/dashboard/recent", response_class=HTMLResponse)
@@ -347,6 +384,34 @@ def fragment_sessions(
         "stage_filters": stage_filters,
         "stage_names": list(_STAGE_NAMES),
     })
+
+
+@router.get("/parliaments/{parliament_id}/sessions/status")
+def fragment_sessions_status(
+    parliament_id: str,
+    ids: str = "",
+    token: str | None = Cookie(default=None, alias=COOKIE_NAME),
+    config: AppConfig = Depends(get_config),
+) -> JSONResponse:
+    """Live per-stage status for a set of sessions: `{sid: {stage: "complete"|…}}`.
+
+    The session list polls this while a job is running so a stage's cell flips
+    grey→green the moment its output lands, without reloading the whole table.
+    Uses the same cheap on-disk status read as the table; a sync `def` so it
+    runs in FastAPI's threadpool and never blocks the event loop. The id list is
+    capped so a crafted request can't fan out unbounded filesystem reads.
+    """
+    _require_page_user(token, config)
+    p = _resolve_parliament(parliament_id, config)
+    tracker = get_tracker()
+    wanted = [s for s in ids.split(",") if s][:500]
+    out: dict[str, dict[str, str]] = {}
+    for sid in wanted:
+        try:
+            out[sid] = tracker.session_status_cheap(parliament_id, p, sid)
+        except Exception:
+            continue
+    return JSONResponse(out)
 
 
 @router.post("/parliaments/{parliament_id}/sessions/bulk-rerun", response_class=HTMLResponse)
@@ -518,10 +583,19 @@ async def session_detail_page(
         return RedirectResponse(url="/login", status_code=302)
     parliament = _resolve_parliament(parliament_id, config)
     sc = get_session_content()
-    summary = sc.summary(parliament_id, parliament, session_id)
+
+    # Reading + parsing the session's processed files is filesystem-heavy;
+    # run it in a worker thread so it doesn't block the event loop (e.g. while
+    # a job is running) and freeze every other in-flight request.
+    def _load() -> tuple:
+        s = sc.summary(parliament_id, parliament, session_id)
+        if s is None:
+            return None, None
+        return s, (sc.content(parliament_id, parliament, session_id) or [])
+
+    summary, content = await asyncio.to_thread(_load)
     if summary is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    content = sc.content(parliament_id, parliament, session_id) or []
     ctx = _nav_ctx(user, config, active_section="parliaments", active_sub="sessions", parliament_id=parliament_id)
     ctx.update({
         "summary": asdict(summary),
@@ -707,7 +781,9 @@ async def parliament_landing(
     if not user:
         return RedirectResponse(url="/login", status_code=302)
     parliament = _resolve_parliament(parliament_id, config)
-    overview = get_parliament_stats().overview(parliament_id, parliament, config)
+    overview = await asyncio.to_thread(
+        get_parliament_stats().overview, parliament_id, parliament, config
+    )
     ctx = _nav_ctx(user, config, active_section="parliaments", active_sub="overview", parliament_id=parliament_id)
     ctx["overview"] = asdict(overview)
     ctx["update_stages"] = _runnable_update_stages(parliament, config)

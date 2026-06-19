@@ -23,6 +23,19 @@
     </button>
   </div>
 
+  {% set session_active = "$store.job && $store.job.active && $store.job.parliament==='" ~ parliament.id ~ "' && $store.job.current_session==='" ~ summary.id ~ "'" %}
+  <div x-cloak x-show="{{ session_active }}"
+       class="flex flex-wrap items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-4 py-2 text-sm">
+    <svg class="animate-spin h-4 w-4 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    </svg>
+    <span class="font-medium">This session is being processed now</span>
+    <template x-if="$store.job.stage">
+      <span>· step <span class="font-medium" x-text="$store.job.stage"></span></span>
+    </template>
+  </div>
+
   <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
     <div class="bg-white border border-slate-200 rounded-lg p-3">
       <div class="text-xs text-slate-500">Speeches</div>
@@ -38,9 +51,21 @@
         {% for stage in stages %}
           {% set detail = summary.status.get(stage, {}) %}
           {% set st = detail.status if detail is mapping else detail %}
-          {% with stage=stage, status=st %}
-            {% include "parliaments/components/stage_pill.html" %}
-          {% endwith %}
+          {% set stage_active = session_active ~ " && $store.job.stage==='" ~ stage ~ "'" %}
+          <span x-cloak x-show="{{ stage_active }}"
+                class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded bg-blue-100 text-blue-800"
+                title="{{ stage }}: running now">
+            <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            {{ stage }}
+          </span>
+          <span x-show="!({{ stage_active }})">
+            {% with stage=stage, status=st %}
+              {% include "parliaments/components/stage_pill.html" %}
+            {% endwith %}
+          </span>
         {% endfor %}
       </div>
     </div>
@@ -132,6 +157,7 @@
       <h3 class="text-lg font-semibold mb-2">Re-run session {{ summary.id }}</h3>
       <form hx-post="/parliaments/{{ parliament.id }}/sessions/bulk-rerun"
             hx-swap="none"
+            hx-disabled-elt="find button[type='submit']"
             @htmx:after-request="showRerun = false">
         <input type="hidden" name="ids" value="{{ summary.id }}" />
         <div class="grid grid-cols-2 gap-2 text-sm">
@@ -154,7 +180,10 @@
             <span class="text-slate-600">force</span>
           </label>
           <button type="button" class="px-3 py-1 rounded border" @click="showRerun = false">Cancel</button>
-          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Re-run</button>
+          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white inline-flex items-center gap-2 disabled:opacity-60">
+            {% include "components/spinner.html" %}
+            Re-run
+          </button>
         </div>
       </form>
     </div>

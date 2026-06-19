@@ -4,6 +4,66 @@
 <div x-data="{
        selected: [], showBulk: false, showDateRerun: false,
        sort: '{{ initial_sort }}', dir: '{{ initial_dir }}',
+       liveStatus: {},
+       isDone(rid, stage, srv) {
+         const s = this.liveStatus[rid];
+         if (s && stage in s) return s[stage] === 'complete';
+         return srv;
+       },
+       markDone(rid, stage) {
+         const cur = this.liveStatus[rid] || {};
+         if (cur[stage] === 'complete') return;
+         this.liveStatus = Object.assign({}, this.liveStatus,
+           { [rid]: Object.assign({}, cur, { [stage]: 'complete' }) });
+       },
+       async refreshStatus() {
+         const ids = this.visibleIds();
+         if (!ids.length) return;
+         try {
+           const r = await fetch('/parliaments/{{ parliament.id }}/sessions/status?ids='
+                                  + encodeURIComponent(ids.join(',')),
+                                  { credentials: 'same-origin' });
+           if (!r.ok) return;
+           const incoming = await r.json();
+           const next = Object.assign({}, this.liveStatus);
+           for (const sid in incoming) {
+             const cur = next[sid] || {};
+             const merged = Object.assign({}, cur);
+             for (const stage in incoming[sid]) {
+               if (cur[stage] === 'complete') continue;
+               merged[stage] = incoming[sid][stage];
+             }
+             next[sid] = merged;
+           }
+           this.liveStatus = next;
+         } catch (e) { /* keep last known */ }
+       },
+       init() {
+         this._lastActive = null;
+         const onActiveChange = () => {
+           const job = this.$store.job;
+           const here = job && job.active && job.parliament === '{{ parliament.id }}';
+           const cur = (here && job.current_session && job.stage)
+             ? { sid: job.current_session, stage: job.stage } : null;
+           const prev = this._lastActive;
+           if (prev && (!cur || prev.sid !== cur.sid || prev.stage !== cur.stage)) {
+             this.markDone(prev.sid, prev.stage);
+           }
+           this._lastActive = cur;
+         };
+         this.$watch('$store.job.current_session', onActiveChange);
+         this.$watch('$store.job.stage', onActiveChange);
+         this.$watch('$store.job.active', onActiveChange);
+
+         let wasActive = false;
+         this._statusTimer = setInterval(() => {
+           if (document.hidden) return;
+           const job = this.$store.job;
+           const here = job && job.active && job.parliament === '{{ parliament.id }}';
+           if (here) { this.refreshStatus(); wasActive = true; }
+           else if (wasActive) { this.refreshStatus(); wasActive = false; }
+         }, 4000);
+       },
        setSort(col) {
          if (this.sort === col) {
            this.dir = this.dir === 'asc' ? 'desc' : 'asc';
@@ -101,6 +161,22 @@
     </button>
   </div>
 
+  <div x-cloak x-show="$store.job && $store.job.active && $store.job.parliament === '{{ parliament.id }}'"
+       class="flex flex-wrap items-center gap-x-2 gap-y-1 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-4 py-2 text-sm">
+    <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+    <span class="font-medium">Job running</span>
+    <template x-if="$store.job.current_session">
+      <span>· updating <span class="font-mono font-medium" x-text="$store.job.current_session"></span></span>
+    </template>
+    <template x-if="$store.job.stage">
+      <span>· step <span class="font-medium" x-text="$store.job.stage"></span></span>
+    </template>
+    <template x-if="$store.job.sessions_total">
+      <span>· <span x-text="$store.job.sessions_completed"></span>/<span x-text="$store.job.sessions_total"></span> sessions</span>
+    </template>
+    <a href="/parliaments/{{ parliament.id }}/jobs" class="ml-auto text-blue-700 hover:underline text-xs shrink-0">view job →</a>
+  </div>
+
   <div id="session-table"
        class="bg-white border border-slate-200 rounded-lg overflow-x-auto"
        hx-get="/parliaments/{{ parliament.id }}/sessions/list"
@@ -120,6 +196,7 @@
       </p>
       <form hx-post="/parliaments/{{ parliament.id }}/sessions/bulk-rerun"
             hx-swap="none"
+            hx-disabled-elt="find button[type='submit']"
             @htmx:after-request="showBulk = false; selected = []">
         <input type="hidden" name="ids" x-bind:value="selected.join(',')" />
         <div class="grid grid-cols-2 gap-2 text-sm">
@@ -142,7 +219,10 @@
             <span class="text-slate-600">force</span>
           </label>
           <button type="button" class="px-3 py-1 rounded border" @click="showBulk = false">Cancel</button>
-          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Re-run</button>
+          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white inline-flex items-center gap-2 disabled:opacity-60">
+            {% include "components/spinner.html" %}
+            Re-run
+          </button>
         </div>
       </form>
     </div>
@@ -156,6 +236,7 @@
       <h3 class="text-lg font-semibold mb-2">Re-run by date range</h3>
       <form hx-post="/parliaments/{{ parliament.id }}/sessions/bulk-rerun-by-date"
             hx-swap="none"
+            hx-disabled-elt="find button[type='submit']"
             @htmx:after-request="showDateRerun = false">
         <input type="hidden" name="period" value="{{ selected_period }}" />
         <div class="grid grid-cols-2 gap-3 mb-3">
@@ -188,7 +269,10 @@
             <span class="text-slate-600">force</span>
           </label>
           <button type="button" class="px-3 py-1 rounded border" @click="showDateRerun = false">Cancel</button>
-          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white">Re-run</button>
+          <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white inline-flex items-center gap-2 disabled:opacity-60">
+            {% include "components/spinner.html" %}
+            Re-run
+          </button>
         </div>
       </form>
     </div>

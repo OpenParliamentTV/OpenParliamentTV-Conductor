@@ -65,7 +65,12 @@ class WorkflowRunner:
 
         try:
             if pipeline_stages:
-                job.sessions_total = self._estimate_total_sessions(job, parliament)
+                # Iterates every session calling Tools' status checks — can take
+                # seconds on a large data dir. Run it off the event loop so the
+                # UI stays responsive while a job is starting up.
+                job.sessions_total = await asyncio.to_thread(
+                    self._estimate_total_sessions, job, parliament
+                )
                 self.job_manager.set_current(job)
                 await self._run_pipeline(job, parliament, pipeline_stages)
 
