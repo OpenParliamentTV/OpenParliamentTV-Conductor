@@ -25,10 +25,20 @@ _SESSION_PATTERNS = [
     re.compile(r"Extracting Named Entities for (\d+)"),
 ]
 
-# Banner messages emitted by Tools' workflow.execute_workflow at each stage
-# transition. We use them to advance Job.stage so the dashboard isn't stuck
-# on stages[0] for the whole run. Order doesn't matter — each is checked
-# against every line.
+# Banner messages emitted by Tools' workflow at each stage transition. We use
+# them to advance Job.stage so the dashboard isn't stuck on stages[0] for the
+# whole run. Order doesn't matter — each is checked against every line.
+#
+# CROSS-REPO CONTRACT: these substrings must stay in lockstep with the stage
+# headers in OpenParliamentTV-Tools' optv/shared/workflow.py (_run_*_stage).
+# Since the Tools refactor that made logging work-aware, each header is emitted
+# *only when the stage actually has work* — so on a no-op run Job.stage
+# legitimately stops advancing (download → completed) instead of cycling every
+# stage. The Tools no-op lines ("Merge: … nothing to merge", "NEL link: …
+# nothing to link", "Time-alignment: … nothing to align", "NER: … nothing to
+# extract") are deliberately worded to NOT contain these substrings. If you
+# reword a header in Tools, update the matching substring here (and the
+# regression test in tests/test_progress_patterns.py).
 _STAGE_PATTERNS = [
     (re.compile(r"Downloading media and proceeding data"), "download"),
     (re.compile(r"Merging data from"), "merge"),
