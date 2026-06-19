@@ -11,7 +11,13 @@ Strategy:
      using `GIT_USER_NAME`/`GIT_USER_EMAIL` from settings (no global git config).
 
 Cancellation: a background task watches the cancellation flag and terminates
-the subprocess on signal (SIGTERM, then SIGKILL after a 10s grace period).
+the subprocess on signal (SIGTERM, then SIGKILL after a 10s grace period). The
+workflow runs in its own process group (`start_new_session=True`) and the signal
+is sent to the whole group via `os.killpg`, not just the direct child — during
+alignment the workflow forks ffmpeg and an aeneas multiprocessing worker that
+inherit the stdout pipe, so killing only the parent would orphan them, leaving
+the pipe's write end open and the `async for proc.stdout` read loop blocked
+forever (the job would then never leave the `cancelling` state).
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ import importlib
 import logging
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -243,6 +250,7 @@ class WorkflowRunner:
             stderr=asyncio.subprocess.STDOUT,
             cwd=str(tools_dir),
             env=env,
+            start_new_session=True,  # own process group, so cancel can kill ffmpeg/aeneas too
         )
 
         watcher = asyncio.create_task(self._watch_cancellation(job, proc))
@@ -269,19 +277,40 @@ class WorkflowRunner:
         Sleep 1s between checks — gives ~1s cancellation latency regardless of
         how chatty the subprocess is. Without this, cancellation only kicks in
         when a new line arrives on stdout (could be minutes during alignment).
+
+        Signals the whole process group (SIGTERM, then SIGKILL after the grace
+        period), not just `proc`: the workflow forks ffmpeg + an aeneas worker
+        during alignment, and they must die too so the stdout pipe reaches EOF
+        and the reader loop in `_run_workflow` unblocks. See module docstring.
         """
         try:
             while proc.returncode is None:
                 if self._is_cancelled(job):
-                    proc.terminate()
+                    self._signal_group(proc, signal.SIGTERM)
                     try:
                         await asyncio.wait_for(proc.wait(), timeout=_CANCEL_GRACE_SECONDS)
                     except asyncio.TimeoutError:
-                        proc.kill()
+                        self._signal_group(proc, signal.SIGKILL)
                     return
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             return
+
+    @staticmethod
+    def _signal_group(proc: asyncio.subprocess.Process, sig: int) -> None:
+        """Send `sig` to the subprocess's whole process group, falling back to
+        the lone process if the group is already gone."""
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except ProcessLookupError:
+            return  # already exited
+        except OSError:
+            # No process group (shouldn't happen with start_new_session) — hit
+            # the direct child so cancellation still makes progress.
+            try:
+                proc.send_signal(sig)
+            except ProcessLookupError:
+                pass
 
     def _apply_log_patterns(self, job: Job, line: str, seen_sessions: set[str]) -> None:
         """Update job.stage and job.sessions_completed from a subprocess log line.
