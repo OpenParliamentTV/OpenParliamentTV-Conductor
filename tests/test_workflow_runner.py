@@ -129,6 +129,53 @@ def _make_app_config(tmp_path: Path, tools_dir: Path, data_dir: Path) -> AppConf
     return app_config
 
 
+def _install_fake_common_with_statuses(parliament: str, sessions: dict) -> None:
+    """Register a fake `optv.parliaments.<p>.common` whose Config.status returns
+    a caller-supplied set of status names per session. `is_newer` is always True
+    (mimics the merge stage having just bumped the merged cache)."""
+    common = types.ModuleType(f"optv.parliaments.{parliament}.common")
+
+    class FakeSessionStatus(enum.Enum):
+        linked = "linked"
+        aligned = "aligned"
+        ner = "ner"
+        no_text = "no_text"
+
+    class FakeConfig:
+        def __init__(self, data_dir):
+            self.data_dir = Path(data_dir)
+        def sessions(self, prefix=""):
+            return list(sessions)
+        def is_newer(self, session, stage, than):
+            return True
+        def status(self, session):
+            return {FakeSessionStatus[name] for name in sessions[session]}
+
+    common.Config = FakeConfig
+    common.SessionStatus = FakeSessionStatus
+    sys.modules[f"optv.parliaments.{parliament}.common"] = common
+
+
+def test_estimate_total_skips_already_aligned_and_no_text(tmp_path):
+    # 21001 already aligned, 21003 media-only (no_text) — neither should align
+    # again even though is_newer() is True (merge bumped the merged cache). Only
+    # 21002, which lacks the aligned flag, is real align work.
+    _install_fake_common_with_statuses("YY", {
+        "21001": {"linked", "aligned"},
+        "21002": {"linked"},
+        "21003": {"linked", "no_text"},
+    })
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    app_config = _make_app_config(tmp_path, tmp_path / "tools", data_dir)
+    app_config.parliaments["YY"] = app_config.parliaments.pop("XX")
+    runner = WorkflowRunner(app_config, JobManager(tmp_path / "status"),
+                            LogStreamer(tmp_path / "status"), notifier=None)
+
+    job = Job.new(parliament="YY", stages=["align"], period=21)
+    assert runner._estimate_total_sessions(job, app_config.parliaments["YY"]) == 1
+
+
 @pytest.mark.asyncio
 async def test_runner_streams_logs_and_updates_progress(tmp_path):
     tools_dir = tmp_path / "tools"

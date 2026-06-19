@@ -136,7 +136,10 @@ class WorkflowRunner:
         sessions need re-merging but only 3 need nel/align showed "0/85 … 3/85",
         with the bar stuck because the counter could never reach 85. Now it reads
         "0/3 … 3/3". Gates mirror workflow.py: nel → `SessionStatus.linked`
-        absent; align → `aligned` absent or merged newer; ner → `ner` absent.
+        absent; align → not `no_text` and `aligned` absent and merged newer
+        (an `or` here counted every already-aligned session whenever the merge
+        stage had just bumped the merged cache's mtime, showing e.g. "0/85" for a
+        no-op run); ner → `ner` absent.
         `force=True` bypasses the gates and counts every in-scope session (they
         all get re-run through the requested progress stages).
 
@@ -182,7 +185,9 @@ class WorkflowRunner:
                 todo += 1
                 continue
             if "align" in progress_stages and (
-                SessionStatus.aligned not in status or cfg.is_newer(s, "merged", "aligned")
+                SessionStatus.no_text not in status
+                and SessionStatus.aligned not in status
+                and cfg.is_newer(s, "merged", "aligned")
             ):
                 todo += 1
                 continue
