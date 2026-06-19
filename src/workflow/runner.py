@@ -118,19 +118,32 @@ class WorkflowRunner:
         return False
 
     def _estimate_total_sessions(self, job: Job, parliament: ParliamentConfig) -> int:
-        """Estimate how many sessions actually need work for the requested stages.
+        """Estimate how many sessions the progress counter will actually count.
 
-        Mimics workflow.py's per-stage gates: merge → `is_newer` on media/proceedings;
-        nel/align/ner → `SessionStatus.{linked,aligned,ner}` absent. `force=True`
-        bypasses the gates and counts every in-scope session.
+        The denominator must measure the same thing the live numerator does.
+        `sessions_completed` is bumped only by per-session log lines for
+        nel/align/ner (see `progress._SESSION_PATTERNS`); download/parse/merge
+        emit no per-session signal. So we count only the nel/align/ner-needing
+        sessions among the requested stages. Counting merge-needing sessions too
+        (as this used to) inflates the total — e.g. an update job where 85
+        sessions need re-merging but only 3 need nel/align showed "0/85 … 3/85",
+        with the bar stuck because the counter could never reach 85. Now it reads
+        "0/3 … 3/3". Gates mirror workflow.py: nel → `SessionStatus.linked`
+        absent; align → `aligned` absent or merged newer; ner → `ner` absent.
+        `force=True` bypasses the gates and counts every in-scope session (they
+        all get re-run through the requested progress stages).
 
-        Returns 0 ("unknown") when we genuinely can't predict — pure-download jobs
-        discover new sessions upstream, and jobs where Tools' status check raises.
-        The template treats 0 as "no denominator, show a counter only".
+        Returns 0 ("unknown") when there's no per-session signal to count against
+        (download/parse/merge-only jobs) or we can't predict — the template then
+        shows a bare counter with no denominator.
 
         Note: this is the only in-process Tools import remaining. `common.py` is
         stable; restart Conductor to pick up changes there.
         """
+        progress_stages = {s for s in job.stages if s in {"nel", "align", "ner"}}
+        if not progress_stages:
+            return 0  # no per-session progress signal — show a bare counter
+
         module = importlib.import_module(f"optv.parliaments.{job.parliament}.common")
         cfg = module.Config(Path(parliament.data_dir))
         SessionStatus = module.SessionStatus
@@ -149,10 +162,6 @@ class WorkflowRunner:
         if job.force:
             return len(sessions)
 
-        per_session_stages = {s for s in job.stages if s in {"merge", "nel", "align", "ner"}}
-        if not per_session_stages:
-            return 0  # download-only / publish-only — no per-session prediction
-
         todo = 0
         for s in sessions:
             try:
@@ -162,20 +171,15 @@ class WorkflowRunner:
                 # this session needs attention rather than silently dropping it.
                 todo += 1
                 continue
-            if "merge" in per_session_stages and (
-                cfg.is_newer(s, "media", "merged") or cfg.is_newer(s, "proceedings", "merged")
-            ):
+            if "nel" in progress_stages and SessionStatus.linked not in status:
                 todo += 1
                 continue
-            if "nel" in per_session_stages and SessionStatus.linked not in status:
-                todo += 1
-                continue
-            if "align" in per_session_stages and (
+            if "align" in progress_stages and (
                 SessionStatus.aligned not in status or cfg.is_newer(s, "merged", "aligned")
             ):
                 todo += 1
                 continue
-            if "ner" in per_session_stages and SessionStatus.ner not in status:
+            if "ner" in progress_stages and SessionStatus.ner not in status:
                 todo += 1
                 continue
         return todo
@@ -303,6 +307,12 @@ class WorkflowRunner:
             seen_sessions.add(session)
             job.current_session = session
             job.sessions_completed = len(seen_sessions)
+            # Keep the denominator >= the numerator. The estimate can undercount
+            # (drift, or the publish step announcing sessions beyond the nel/align
+            # set), and "4/3 sessions" reads as broken — grow the total instead so
+            # it stays consistent and still ends at "N/N".
+            if job.sessions_completed > job.sessions_total:
+                job.sessions_total = job.sessions_completed
             if job.sessions_total:
                 job.progress = min(
                     100,
