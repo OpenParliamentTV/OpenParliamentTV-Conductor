@@ -174,7 +174,7 @@
     <template x-if="$store.job.sessions_total">
       <span>· <span x-text="$store.job.sessions_completed"></span>/<span x-text="$store.job.sessions_total"></span> sessions</span>
     </template>
-    <a href="/parliaments/{{ parliament.id }}/jobs" class="ml-auto text-blue-700 hover:underline text-xs shrink-0">view job →</a>
+    <a href="/parliaments/{{ parliament.id }}/jobs" class="ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded border border-blue-300 text-blue-700 bg-white hover:bg-blue-50">view job →</a>
   </div>
 
   <div id="session-table"

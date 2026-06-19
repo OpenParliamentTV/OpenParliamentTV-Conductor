@@ -6,7 +6,7 @@
   <div class="flex items-start justify-between">
     <div>
       <a href="/parliaments/{{ parliament.id }}/sessions"
-         class="text-xs text-blue-600 hover:underline">← all sessions</a>
+         class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50">← all sessions</a>
       <h1 class="text-xl font-semibold font-mono mt-1">{{ summary.id }}</h1>
       <div class="text-sm text-slate-600 mt-1">
         {% if summary.date_start %}{{ summary.date_start | humandate }}{% endif %}

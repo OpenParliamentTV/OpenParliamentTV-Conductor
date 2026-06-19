@@ -19,13 +19,13 @@
         {{ job.status }}{% if job.stage %} · {{ job.stage }}{% endif %}
       </span>
       {% if job.status in ('queued', 'running') %}
-      <button class="text-xs text-red-600 hover:underline"
+      <button class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded border border-red-300 text-red-700 bg-white hover:bg-red-50"
               hx-post="/api/parliaments/{{ job.parliament }}/jobs/{{ job.id }}/cancel"
               hx-swap="none"
               hx-confirm="Cancel this job?">cancel</button>
       {% endif %}
       <a href="/parliaments/{{ job.parliament }}/jobs/{{ job.id }}"
-         class="text-xs text-blue-600 hover:underline">logs</a>
+         class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded border border-blue-300 text-blue-700 bg-white hover:bg-blue-50">logs</a>
     </div>
   </div>
   {% if job.sessions_total %}

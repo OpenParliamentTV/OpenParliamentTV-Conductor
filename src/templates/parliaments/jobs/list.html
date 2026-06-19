@@ -14,7 +14,7 @@
   <section>
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-lg font-semibold">Queue</h2>
-      <button class="text-xs text-red-600 hover:underline"
+      <button class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded border border-red-300 text-red-700 bg-white hover:bg-red-50"
               hx-post="/api/parliaments/{{ parliament.id }}/jobs/queue/clear"
               hx-swap="none"
               hx-confirm="Remove all queued jobs for {{ parliament.name }}? The running job is not affected."
@@ -30,7 +30,7 @@
   <section>
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-lg font-semibold">History</h2>
-      <button class="text-xs text-red-600 hover:underline"
+      <button class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded border border-red-300 text-red-700 bg-white hover:bg-red-50"
               hx-post="/api/parliaments/{{ parliament.id }}/jobs/history/clear"
               hx-swap="none"
               hx-confirm="Delete all job history for {{ parliament.name }}? This cannot be undone."
