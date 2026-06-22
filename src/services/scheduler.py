@@ -21,11 +21,57 @@ from src.services.job_manager import Job, JobManager
 logger = logging.getLogger(__name__)
 
 
+def _translate_weekday(field: str) -> str:
+    """Translate a crontab day-of-week field into APScheduler's numbering.
+
+    Standard cron numbers weekdays Sunday=0..Saturday=6 (with 7 also Sunday),
+    but APScheduler's ``day_of_week`` is Monday=0..Sunday=6. Passing a crontab
+    field through verbatim therefore shifts every day one later (``1-5`` becomes
+    Tue-Sat instead of Mon-Fri). We expand each numeric token to explicit day
+    numbers and remap them so authors can write ordinary crontab syntax.
+
+    Name tokens (``mon``, ``fri-sun``, ...) mean the same weekday in both
+    systems, so they pass through untouched, as does ``*``.
+    """
+
+    def remap(cron_day: int) -> int:
+        # 0/7 -> Sun, fold to 0..6, then shift Sun=0 -> Sun=6 (Mon=0).
+        return (cron_day % 7 + 6) % 7
+
+    def expand(token: str) -> set[int]:
+        base, _, step_s = token.partition("/")
+        step = int(step_s) if step_s else 1
+        if base == "*":
+            lo, hi = 0, 6
+        elif "-" in base:
+            lo_s, hi_s = base.split("-", 1)
+            lo, hi = int(lo_s), int(hi_s)
+        else:
+            # A bare number with a step (``2/2``) runs from that day onward.
+            lo = int(base)
+            hi = lo if not step_s else 7
+        return set(range(lo, hi + 1, step))
+
+    if field == "*":
+        return field
+
+    days: set[int] = set()
+    for token in field.split(","):
+        if any(c.isalpha() for c in token):
+            # Name-based token: same meaning in both systems, keep as-is. Mixing
+            # names and numbers in one field is not supported.
+            return field
+        days.update(expand(token))
+
+    return ",".join(str(d) for d in sorted(remap(d) for d in days))
+
+
 def _cron_trigger_from_string(cron: str) -> CronTrigger:
     parts = cron.split()
     if len(parts) != 5:
         raise ValueError(f"Expected 5-field cron expression, got: {cron!r}")
     minute, hour, day, month, weekday = parts
+    weekday = _translate_weekday(weekday)
     return CronTrigger(minute=minute, hour=hour, day=day, month=month, day_of_week=weekday)
 
 
