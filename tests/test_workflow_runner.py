@@ -176,6 +176,56 @@ def test_estimate_total_skips_already_aligned_and_no_text(tmp_path):
     assert runner._estimate_total_sessions(job, app_config.parliaments["YY"]) == 1
 
 
+def test_apply_log_patterns_counts_each_stage_per_session(tmp_path):
+    """A nel+align+ner run touches every session once per stage, so the counter
+    must advance through all three stages instead of hitting 100% during nel and
+    freezing — and `current_session` must follow the session being worked now,
+    not stay stuck on the last-linked session. Regression for the bug where a
+    bare-session `seen` set deduped across stages.
+    """
+    app_config = _make_app_config(tmp_path, tmp_path / "tools", tmp_path / "data")
+    runner = WorkflowRunner(app_config, JobManager(tmp_path / "status"),
+                            LogStreamer(tmp_path / "status"), notifier=None)
+    job = Job.new(parliament="XX", stages=["nel", "align", "ner"], period=21)
+    job.sessions_total = 6  # 2 sessions × 3 stages
+    seen: set[tuple[str, str]] = set()
+
+    lines = [
+        "INFO Linking entities with wikidata IDs (2 session(s))",
+        "WARNING Linking entities for 27045 from 27045-merged.json",
+        "WARNING Publishing 27045 from 27045-merged.json",
+        "WARNING Linking entities for 27276 from 27276-merged.json",
+        "WARNING Publishing 27276 from 27276-merged.json",
+        "INFO Updating time-alignment for merged files (2 session(s))",
+        "WARNING Time-aligning 27045",
+        "WARNING Publishing 27045 from 27045-aligned.json",
+        "WARNING Time-aligning 27276",
+        "WARNING Publishing 27276 from 27276-aligned.json",
+        "INFO Updating NER for published sessions (2 session(s))",
+        "WARNING Extracting Named Entities for 27045 from 27045-aligned.json",
+        "WARNING Extracting Named Entities for 27276 from 27276-aligned.json",
+    ]
+    for line in lines:
+        runner._apply_log_patterns(job, line, seen)
+
+    # All six (stage, session) work-units counted — not deduped to 2.
+    assert job.sessions_completed == 6
+    assert job.progress == 100
+    assert job.stage == "ner"
+    # The spinner followed the latest line, not the last nel session.
+    assert job.current_session == "27276"
+
+    # Mid-align snapshot: nel done (2) + first align (1) = 3/6, current = 27045.
+    job2 = Job.new(parliament="XX", stages=["nel", "align", "ner"], period=21)
+    job2.sessions_total = 6
+    seen2: set[tuple[str, str]] = set()
+    for line in lines[:7]:  # through "Time-aligning 27045"
+        runner._apply_log_patterns(job2, line, seen2)
+    assert job2.stage == "align"
+    assert job2.current_session == "27045"
+    assert job2.sessions_completed == 3
+
+
 @pytest.mark.asyncio
 async def test_runner_streams_logs_and_updates_progress(tmp_path):
     tools_dir = tmp_path / "tools"

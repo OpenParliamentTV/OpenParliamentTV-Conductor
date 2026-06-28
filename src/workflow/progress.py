@@ -17,12 +17,25 @@ from typing import Callable
 from src.services.job_manager import Job
 from src.services.log_streamer import LogStreamer
 
-# Regexes capturing the session id from known messages in Tools' workflow.
+# Regexes capturing the session id from known per-session messages in Tools'
+# workflow, paired with the stage each one belongs to. Progress is counted per
+# (stage, session) work-unit, not per bare session: a single job that runs
+# nel+align+ner touches every session three times, and deduping on the bare id
+# would let the nel pass alone fill the counter to 100% and freeze align/ner.
+#
+# `"Publishing {session}"` carries `None` because it is not a stage of its own —
+# Tools emits it as a sub-step inside whatever stage is currently writing the
+# session's high-water-mark file (nel/align/ner all call publish()). Attributing
+# it to the live `job.stage` makes it dedupe against that stage's own per-session
+# line (e.g. "Time-aligning 27045" then "Publishing 27045" in the align stage
+# count as one unit, not two). For a merge-only job — which has no per-session
+# stage line — the publish lines are the only signal, so they still drive a bare
+# counter under the `merge` stage.
 _SESSION_PATTERNS = [
-    re.compile(r"Publishing (\d+) from"),
-    re.compile(r"Time-aligning (\d+)"),
-    re.compile(r"Linking entities for (\d+) from"),
-    re.compile(r"Extracting Named Entities for (\d+)"),
+    (re.compile(r"Publishing (\d+) from"), None),
+    (re.compile(r"Time-aligning (\d+)"), "align"),
+    (re.compile(r"Linking entities for (\d+) from"), "nel"),
+    (re.compile(r"Extracting Named Entities for (\d+)"), "ner"),
 ]
 
 # Banner messages emitted by Tools' workflow at each stage transition. We use
@@ -61,7 +74,7 @@ class JobLogHandler(logging.Handler):
         self.streamer = streamer
         self.loop = loop
         self.on_progress = on_progress
-        self.seen_sessions: set[str] = set()
+        self.seen_sessions: set[tuple[str, str]] = set()
         self.setFormatter(
             logging.Formatter("%(asctime)s %(levelname)-5s %(name)s: %(message)s", "%H:%M:%S")
         )
@@ -86,16 +99,25 @@ class JobLogHandler(logging.Handler):
         return False
 
     def _maybe_bump_progress(self, message: str) -> bool:
-        for pat in _SESSION_PATTERNS:
+        for pat, stage in _SESSION_PATTERNS:
             m = pat.search(message)
             if not m:
                 continue
             session = m.group(1)
-            if session in self.seen_sessions:
-                return False
-            self.seen_sessions.add(session)
-            self.job.current_session = session
+            changed = False
+            # current_session always tracks the latest per-session line so the
+            # UI spinner follows the session being worked now, even within a
+            # stage we have already counted this session for.
+            if self.job.current_session != session:
+                self.job.current_session = session
+                changed = True
+            key = (stage or self.job.stage, session)
+            if key in self.seen_sessions:
+                return changed
+            self.seen_sessions.add(key)
             self.job.sessions_completed = len(self.seen_sessions)
+            if self.job.sessions_completed > self.job.sessions_total:
+                self.job.sessions_total = self.job.sessions_completed
             if self.job.sessions_total:
                 self.job.progress = min(
                     100,

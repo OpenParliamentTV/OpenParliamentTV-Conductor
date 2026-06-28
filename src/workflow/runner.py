@@ -125,23 +125,26 @@ class WorkflowRunner:
         return False
 
     def _estimate_total_sessions(self, job: Job, parliament: ParliamentConfig) -> int:
-        """Estimate how many sessions the progress counter will actually count.
+        """Estimate how many work-units the progress counter will actually count.
 
         The denominator must measure the same thing the live numerator does.
-        `sessions_completed` is bumped only by per-session log lines for
-        nel/align/ner (see `progress._SESSION_PATTERNS`); download/parse/merge
-        emit no per-session signal. So we count only the nel/align/ner-needing
-        sessions among the requested stages. Counting merge-needing sessions too
-        (as this used to) inflates the total — e.g. an update job where 85
-        sessions need re-merging but only 3 need nel/align showed "0/85 … 3/85",
-        with the bar stuck because the counter could never reach 85. Now it reads
-        "0/3 … 3/3". Gates mirror workflow.py: nel → `SessionStatus.linked`
-        absent; align → not `no_text` and `aligned` absent and merged newer
-        (an `or` here counted every already-aligned session whenever the merge
-        stage had just bumped the merged cache's mtime, showing e.g. "0/85" for a
-        no-op run); ner → `ner` absent.
-        `force=True` bypasses the gates and counts every in-scope session (they
-        all get re-run through the requested progress stages).
+        `sessions_completed` counts per `(stage, session)` work-units across the
+        nel/align/ner stages (see `progress._SESSION_PATTERNS` and
+        `_apply_log_patterns`); download/parse/merge emit no per-session signal.
+        So a session that needs both nel and align counts as TWO units here, not
+        one — otherwise a 235-session nel+align run would show a denominator of
+        235 while the numerator climbs to 470, and the bar would hit 100% halfway
+        through nel and never move during align. Counting merge-needing sessions
+        too (as this once did) would also inflate the total — an update job where
+        85 sessions need re-merging but only 3 need nel showed "0/85 … 3/85" with
+        the bar stuck, because the counter could never reach 85.
+
+        Gates mirror workflow.py: nel → `SessionStatus.linked` absent; align →
+        not `no_text` and `aligned` absent and merged newer (an `or` here counted
+        every already-aligned session whenever the merge stage had just bumped
+        the merged cache's mtime); ner → `ner` absent. `force=True` bypasses the
+        gates: every in-scope session is re-run through every requested progress
+        stage, so the total is `sessions × stages`.
 
         Returns 0 ("unknown") when there's no per-session signal to count against
         (download/parse/merge-only jobs) or we can't predict — the template then
@@ -170,7 +173,7 @@ class WorkflowRunner:
             sessions = [s for s in sessions if s.startswith(str(job.period))]
 
         if job.force:
-            return len(sessions)
+            return len(sessions) * len(progress_stages)
 
         todo = 0
         for s in sessions:
@@ -178,22 +181,20 @@ class WorkflowRunner:
                 status = cfg.status(s)
             except Exception:
                 # If status check fails (corrupt JSON, missing dir, etc.) assume
-                # this session needs attention rather than silently dropping it.
-                todo += 1
+                # this session needs every requested stage rather than silently
+                # dropping it.
+                todo += len(progress_stages)
                 continue
             if "nel" in progress_stages and SessionStatus.linked not in status:
                 todo += 1
-                continue
             if "align" in progress_stages and (
                 SessionStatus.no_text not in status
                 and SessionStatus.aligned not in status
                 and cfg.is_newer(s, "merged", "aligned")
             ):
                 todo += 1
-                continue
             if "ner" in progress_stages and SessionStatus.ner not in status:
                 todo += 1
-                continue
         return todo
 
     async def _pull_repos(self, job: Job, parliament: ParliamentConfig) -> None:
@@ -259,7 +260,7 @@ class WorkflowRunner:
         )
 
         watcher = asyncio.create_task(self._watch_cancellation(job, proc))
-        seen_sessions: set[str] = set()
+        seen_sessions: set[tuple[str, str]] = set()
         try:
             assert proc.stdout is not None
             async for line_bytes in proc.stdout:
@@ -317,12 +318,23 @@ class WorkflowRunner:
             except ProcessLookupError:
                 pass
 
-    def _apply_log_patterns(self, job: Job, line: str, seen_sessions: set[str]) -> None:
+    def _apply_log_patterns(
+        self, job: Job, line: str, seen_sessions: set[tuple[str, str]]
+    ) -> None:
         """Update job.stage and job.sessions_completed from a subprocess log line.
 
         Reuses `_STAGE_PATTERNS` and `_SESSION_PATTERNS` from `progress.py` —
         they `pat.search()` for substrings, so they match formatted log lines
         (with timestamp/level prefixes) just as well as raw record messages.
+
+        Progress is counted per `(stage, session)` work-unit, not per bare
+        session id: a job running nel+align+ner processes every session three
+        times, so deduping on the id alone let the nel pass fill the counter to
+        100% and then froze align/ner at "N/N" with `current_session` stuck on
+        the last-linked session (the stage label still advanced — that's a
+        separate, un-deduped pattern). Each `_SESSION_PATTERNS` entry carries its
+        stage; `None` means "use whatever stage is live now" (the publish
+        sub-step, see progress.py).
         """
         changed = False
         for pat, stage in _STAGE_PATTERNS:
@@ -331,15 +343,21 @@ class WorkflowRunner:
                 changed = True
                 break
 
-        for pat in _SESSION_PATTERNS:
+        for pat, stage in _SESSION_PATTERNS:
             m = pat.search(line)
             if not m:
                 continue
             session = m.group(1)
-            if session in seen_sessions:
+            # current_session always tracks the latest per-session line so the
+            # UI spinner follows the session being worked now, even within a
+            # stage we have already counted this session for.
+            if job.current_session != session:
+                job.current_session = session
+                changed = True
+            key = (stage or job.stage, session)
+            if key in seen_sessions:
                 break
-            seen_sessions.add(session)
-            job.current_session = session
+            seen_sessions.add(key)
             job.sessions_completed = len(seen_sessions)
             # Keep the denominator >= the numerator. The estimate can undercount
             # (drift, or the publish step announcing sessions beyond the nel/align
