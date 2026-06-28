@@ -33,6 +33,7 @@ class Job:
     period: int | None = None
     session_filter: str | None = None
     force: bool = False
+    rebuild: bool = False  # re-derive from scratch (implies force in Tools)
     source: str = "manual"  # "manual" | "scheduled"
     schedule_id: str | None = None
     publish_on_success: bool = False

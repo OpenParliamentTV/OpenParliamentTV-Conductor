@@ -17,6 +17,7 @@ class JobCreate(BaseModel):
     stages: list[str] = Field(..., min_length=1)
     session_filter: str | None = None
     force: bool = False
+    rebuild: bool = False  # re-derive from scratch (implies force in Tools)
     publish_on_success: bool = False
 
 
@@ -60,6 +61,7 @@ async def create_job(
         period=payload.period,
         session_filter=payload.session_filter,
         force=payload.force,
+        rebuild=payload.rebuild,
         publish_on_success=payload.publish_on_success,
         source="manual",
     )

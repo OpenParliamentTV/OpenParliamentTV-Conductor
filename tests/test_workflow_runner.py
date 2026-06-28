@@ -284,6 +284,28 @@ def test_build_argv_limit_to_period_depends_on_session_filter(tmp_path):
     assert "--limit-to-period" not in argv
 
 
+def test_build_argv_emits_force_and_rebuild_flags(tmp_path):
+    """A manual re-run always forces; --rebuild is added only when requested
+    (and implies --force in Tools, so both appear)."""
+    tools_dir = tmp_path / "tools"
+    data_dir = tmp_path / "data"
+    app_config = _make_app_config(tmp_path, tools_dir, data_dir)
+    parliament = app_config.parliaments["XX"]
+    runner = WorkflowRunner(app_config, JobManager(tmp_path / "status"),
+                            LogStreamer(tmp_path / "status"), notifier=None)
+
+    force_only = Job.new(parliament="XX", stages=["ner"], period=21, force=True)
+    argv = runner._build_argv(force_only, parliament, ["ner"])
+    assert "--force" in argv
+    assert "--rebuild" not in argv
+
+    rebuilding = Job.new(parliament="XX", stages=["ner"], period=21,
+                         force=True, rebuild=True)
+    argv = runner._build_argv(rebuilding, parliament, ["ner"])
+    assert "--force" in argv
+    assert "--rebuild" in argv
+
+
 def test_build_argv_refreshes_entity_registry_every_job(tmp_path):
     """Every job requests an entity-dump refresh, independent of the nel stage,
     restoring the behaviour legacy `optv pull` had via curl (it re-fetched the

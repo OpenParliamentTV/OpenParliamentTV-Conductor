@@ -419,7 +419,7 @@ async def sessions_bulk_rerun(
     parliament_id: str,
     ids: str = Form(...),
     stages: list[str] = Form(default=[]),
-    force: str | None = Form(default=None),
+    rebuild: str | None = Form(default=None),
     token: str | None = Cookie(default=None, alias=COOKIE_NAME),
     config: AppConfig = Depends(get_config),
     jm: JobManager = Depends(get_job_manager),
@@ -452,7 +452,10 @@ async def sessions_bulk_rerun(
             stages=stages,
             period=period,
             session_filter=f"^({'|'.join(escaped)})$",
-            force=bool(force),
+            # A manual re-run always re-runs the selected stages, so force is
+            # implied; the only user choice is add-only vs. rebuild.
+            force=True,
+            rebuild=bool(rebuild),
             source="manual",
         ))
     return Response(status_code=204)
@@ -465,7 +468,7 @@ async def sessions_bulk_rerun_by_date(
     date_to: str = Form(default=""),
     period: int | None = Form(default=None),
     stages: list[str] = Form(default=[]),
-    force: str | None = Form(default=None),
+    rebuild: str | None = Form(default=None),
     token: str | None = Cookie(default=None, alias=COOKIE_NAME),
     config: AppConfig = Depends(get_config),
     jm: JobManager = Depends(get_job_manager),
@@ -487,7 +490,10 @@ async def sessions_bulk_rerun_by_date(
         stages=stages,
         period=effective_period,
         session_filter=f"^({'|'.join(escaped)})$",
-        force=bool(force),
+        # A manual re-run always re-runs the selected stages, so force is
+        # implied; the only user choice is add-only vs. rebuild.
+        force=True,
+        rebuild=bool(rebuild),
         source="manual",
     )
     jm.enqueue(job)

@@ -210,13 +210,13 @@
         </div>
         <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200">
           <label class="flex items-center gap-2 text-sm cursor-pointer mr-auto"
-                 title="Re-process the selected stages even if their outputs already exist">
+                 title="Re-derive selected stages from scratch — replaces existing output (re-parsed transcript text, alignment, NER, links), not just fills gaps; can correct &amp; remove data. Never deletes cached audio; a failed parse can't reduce an existing transcript to empty.">
             <span class="relative inline-flex items-center">
-              <input type="checkbox" name="force" value="1" class="sr-only peer" />
+              <input type="checkbox" name="rebuild" value="1" class="sr-only peer" />
               <span class="block w-9 h-5 bg-slate-300 rounded-full transition-colors peer-checked:bg-blue-600"></span>
               <span class="absolute left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></span>
             </span>
-            <span class="text-slate-600">force</span>
+            <span class="text-slate-600">rebuild</span>
           </label>
           <button type="button" class="px-3 py-1 rounded border" @click="showBulk = false">Cancel</button>
           <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white inline-flex items-center gap-2 disabled:opacity-60">
@@ -260,13 +260,13 @@
         </div>
         <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200">
           <label class="flex items-center gap-2 text-sm cursor-pointer mr-auto"
-                 title="Re-process the selected stages even if their outputs already exist">
+                 title="Re-derive selected stages from scratch — replaces existing output (re-parsed transcript text, alignment, NER, links), not just fills gaps; can correct &amp; remove data. Never deletes cached audio; a failed parse can't reduce an existing transcript to empty.">
             <span class="relative inline-flex items-center">
-              <input type="checkbox" name="force" value="1" class="sr-only peer" />
+              <input type="checkbox" name="rebuild" value="1" class="sr-only peer" />
               <span class="block w-9 h-5 bg-slate-300 rounded-full transition-colors peer-checked:bg-blue-600"></span>
               <span class="absolute left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></span>
             </span>
-            <span class="text-slate-600">force</span>
+            <span class="text-slate-600">rebuild</span>
           </label>
           <button type="button" class="px-3 py-1 rounded border" @click="showDateRerun = false">Cancel</button>
           <button type="submit" class="px-3 py-1 rounded bg-blue-600 text-white inline-flex items-center gap-2 disabled:opacity-60">

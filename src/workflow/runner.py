@@ -403,6 +403,9 @@ class WorkflowRunner:
         argv.append("--no-limit-to-period" if job.session_filter else "--limit-to-period")
         if job.force:
             argv.append("--force")
+        if job.rebuild:
+            # Implies --force in Tools; sending both is harmless and explicit.
+            argv.append("--rebuild")
         if "download" in stage_set:
             argv.append("--download-original")
         if "merge" in stage_set:
