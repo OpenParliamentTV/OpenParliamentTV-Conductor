@@ -74,11 +74,7 @@ services:
       - ./data/entity-fishing-db/db-kb:/opt/entity-fishing/data/db/db-kb
       - ./data/entity-fishing-db/db-en:/opt/entity-fishing/data/db/db-en
       - ./data/entity-fishing-db/db-de:/opt/entity-fishing/data/db/db-de
-      - ./data/entity-fishing-db/db-es:/opt/entity-fishing/data/db/db-es
-      - ./data/entity-fishing-db/db-fr:/opt/entity-fishing/data/db/db-fr
-      - ./data/entity-fishing-db/db-pt:/opt/entity-fishing/data/db/db-pt
       - ./data/entity-fishing-db/db-sv:/opt/entity-fishing/data/db/db-sv
-      - ./data/entity-fishing-db/db-zh:/opt/entity-fishing/data/db/db-zh
     deploy:
       resources:
         limits:
