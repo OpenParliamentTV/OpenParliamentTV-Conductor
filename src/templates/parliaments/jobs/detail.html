@@ -28,13 +28,30 @@
     const pre = document.getElementById('logs');
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(proto + '//' + location.host + '/ws/logs/{{ job.id }}');
-    ws.onmessage = function(ev) {
+    // Buffer incoming lines and flush at most once per frame. The backlog of a
+    // long-running job arrives as thousands of separate frames on connect;
+    // appending each one individually with `textContent +=` is O(n^2) and locks
+    // the main thread for seconds. Batching + appendChild keeps it O(n).
+    let buffer = [];
+    let scheduled = false;
+    function flush() {
+      scheduled = false;
+      if (!buffer.length) return;
       const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
-      pre.textContent += ev.data + '\n';
+      pre.appendChild(document.createTextNode(buffer.join('\n') + '\n'));
+      buffer = [];
       if (atBottom) pre.scrollTop = pre.scrollHeight;
+    }
+    function schedule() {
+      if (!scheduled) { scheduled = true; requestAnimationFrame(flush); }
+    }
+    ws.onmessage = function(ev) {
+      buffer.push(ev.data);
+      schedule();
     };
     ws.onclose = function() {
-      pre.textContent += '\n[connection closed]\n';
+      buffer.push('[connection closed]');
+      schedule();
     };
   })();
 </script>
