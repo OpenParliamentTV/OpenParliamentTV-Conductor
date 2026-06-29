@@ -67,6 +67,7 @@ data/
 # Local Docker overrides
 # ===================
 docker-compose.override.*
+Dockerfile.full
 
 # ===================
 # Python

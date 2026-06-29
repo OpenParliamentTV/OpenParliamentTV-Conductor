@@ -39,4 +39,7 @@ click
 spacyfishing
 numpy
 aeneas
+# PyMuPDF (imported as `fitz`) is the PDF extraction backend used by
+# optv.shared.pdf2tei — required by DE-BY/BW/HH/NW/SH/SN/ST/RP parse stages.
+pymupdf
 jsonschema>=4.0
