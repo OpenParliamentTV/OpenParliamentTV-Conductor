@@ -27,6 +27,7 @@ import importlib
 import logging
 import os
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -210,7 +211,7 @@ class WorkflowRunner:
         """
         for label, repo_dir in (("Tools", parliament.tools_dir), ("Data", parliament.data_dir)):
             cmd = ["git", "pull", "--ff-only"]
-            await self.log_streamer.append(job.id, f"$ {' '.join(cmd)}  (cwd={repo_dir} = {label})")
+            await self.log_streamer.append(job.id, f"$ {shlex.join(cmd)}  (cwd={repo_dir} = {label})")
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -248,7 +249,7 @@ class WorkflowRunner:
 
         job.stage = stages[0]
         self.job_manager.set_current(job)
-        await self.log_streamer.append(job.id, f"$ {' '.join(cmd)}  (cwd={tools_dir})")
+        await self.log_streamer.append(job.id, f"$ {shlex.join(cmd)}  (cwd={tools_dir})")
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -444,7 +445,7 @@ class WorkflowRunner:
         ]
         loop = asyncio.get_running_loop()
         for cmd in cmds:
-            await self.log_streamer.append(job.id, f"$ {' '.join(cmd)}  (cwd={data_dir})")
+            await self.log_streamer.append(job.id, f"$ {shlex.join(cmd)}  (cwd={data_dir})")
             result = await loop.run_in_executor(
                 None,
                 lambda c=cmd: subprocess.run(c, cwd=data_dir, capture_output=True, text=True),
@@ -455,4 +456,4 @@ class WorkflowRunner:
                 await self.log_streamer.append(job.id, result.stderr.rstrip())
             # `git commit` returns 1 when nothing to commit — tolerate and continue.
             if result.returncode != 0 and "commit" not in cmd:
-                raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(cmd)}")
+                raise RuntimeError(f"Command failed ({result.returncode}): {shlex.join(cmd)}")
