@@ -5,12 +5,14 @@ from __future__ import annotations
 import logging
 import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from src import __version__
 from src.api.jobs import router as jobs_router
 from src.api.parliaments import router as parliaments_router
 from src.api.schedules import router as schedules_router
@@ -26,6 +28,11 @@ from src.services.registry import registry
 from src.services.scheduler import SchedulerService
 from src.services.worker import Worker
 from src.workflow.runner import WorkflowRunner
+
+
+# Process start time — reported by /health so a deploy can be confirmed from
+# outside: self-update recreates the container, which resets this.
+_STARTED_AT = datetime.now(tz=timezone.utc).isoformat()
 
 
 def _configure_logging(level: str) -> None:
@@ -97,4 +104,12 @@ app.include_router(pages_router)
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "healthy"}
+    """Liveness plus the two facts you need to verify a deploy from outside.
+
+    `version` says which code is running — an image built from older source
+    won't have the field at all. `started_at` is when this process began, i.e.
+    when the container was last recreated, which is what `scripts/self-update.sh`
+    does after a pull. Both are readable in a browser without authentication,
+    which matters when the only access to a deployment is its URL.
+    """
+    return {"status": "healthy", "version": __version__, "started_at": _STARTED_AT}

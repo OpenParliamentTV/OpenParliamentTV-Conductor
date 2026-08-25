@@ -56,6 +56,10 @@ Jobs flow through a **file-backed queue** (not a database) in `status/jobs/`:
 - **Failing schedules pause themselves**: after `_MAX_CONSECUTIVE_FAILURES` (3) consecutive failed runs, the runner flips `enabled: false` in `schedules.yaml` (via `save_schedules`, the same path the UI uses) and reports it. A cron firing every few minutes at a broken host cannot recover on its own; retrying forever just buries the first failure. Re-enable from the schedules page once the cause is fixed.
 - **Host resource preflight**: before spawning, `_run_pipeline` reads the pids cgroup and raises `HostResourceError` when the box is nearly out of process slots — a file read, never a fork, because that check has to work precisely when forking doesn't. EAGAIN/ENOMEM at spawn time is classified the same way. Without it the job dies deep inside the workflow's numpy import with an OpenBLAS thread error that reads like a pipeline bug.
 
+### Verifying a deploy
+
+The image carries no git checkout (the Dockerfile copies `src/` only), so `__version__` in [src/\_\_init\_\_.py](src/__init__.py) is the only thing that identifies the running code. `GET /health` returns it plus `started_at` (process start = when the container was last recreated), unauthenticated and proxied through nginx — so a deployment you can only reach by URL can still be checked in a browser. Every job log opens with the same version. Bump `__version__` when pushing something whose arrival you need to confirm.
+
 ### Stages
 
 UI stages: `download`, `parse`, `merge`, `nel`, `align`, `ner`, `publish`. Only the first six map to subprocess `workflow.py` CLI flags (`_PIPELINE_STAGES` + `_build_argv` in [runner.py](src/workflow/runner.py)). `publish` is handled separately — the runner shells out to `git add/commit/push` inside `parliament.data_dir`, using `GIT_USER_NAME` / `GIT_USER_EMAIL` from `secrets.env` threaded via `git -c user.name=... -c user.email=...` per command (no global git config mutation). `git commit` returning 1 (nothing to commit) is tolerated; any other non-zero exit aborts.

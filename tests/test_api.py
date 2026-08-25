@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from src import __version__
+
 
 @pytest.fixture
 def app_client(tmp_path, monkeypatch):
@@ -154,7 +156,12 @@ users:
 def test_health(app_client):
     r = app_client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "healthy"}
+    body = r.json()
+    assert body["status"] == "healthy"
+    # Version + process start time are how a deploy is confirmed from outside
+    # (see /health docstring) — dropping either breaks that check silently.
+    assert body["version"] == __version__
+    assert body["started_at"]
 
 
 def test_auth_me(app_client):

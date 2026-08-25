@@ -46,6 +46,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from src import __version__
 from src.config import AppConfig, ParliamentConfig, save_schedules
 from src.services.job_manager import Job, JobManager
 from src.services.log_streamer import LogStreamer
@@ -122,7 +123,12 @@ class WorkflowRunner:
         parliament = self.config.parliaments[job.parliament]
         started = time.time()
 
-        await self.log_streamer.append(job.id, f"=== Job {job.id} started: {job.stages}")
+        # Version in the job log: log excerpts get pasted around without any
+        # note of which build produced them, and "is the fix deployed?" is the
+        # first question asked of a failing job.
+        await self.log_streamer.append(
+            job.id, f"=== Job {job.id} started: {job.stages} (conductor {__version__})"
+        )
         pipeline_stages = [s for s in job.stages if s in _PIPELINE_STAGES]
         publish_requested = "publish" in job.stages or (job.publish_on_success and pipeline_stages)
 
