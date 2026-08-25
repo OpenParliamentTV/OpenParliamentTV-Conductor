@@ -14,11 +14,21 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import json
+import logging
+import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
+
+logger = logging.getLogger(__name__)
+
+# History retention. A schedule firing every few minutes writes one history
+# file and one job log per run — ~300/day, forever, since nothing used to
+# delete them. Keep enough to debug a bad week, drop the rest.
+_HISTORY_MAX_ENTRIES = 500
+_HISTORY_MAX_AGE_DAYS = 30
 
 
 def _utcnow() -> str:
@@ -58,12 +68,25 @@ class Job:
 
 
 class JobManager:
-    def __init__(self, status_dir: Path) -> None:
+    def __init__(
+        self,
+        status_dir: Path,
+        *,
+        history_max_entries: int = _HISTORY_MAX_ENTRIES,
+        history_max_age_days: int = _HISTORY_MAX_AGE_DAYS,
+    ) -> None:
         self.root = Path(status_dir) / "jobs"
         self.queue_file = self.root / "queue.json"
         self.current_file = self.root / "current.json"
         self.history_dir = self.root / "history"
         self.lock_file = self.root / ".lock"
+        # Mirrors LogStreamer's layout (status/logs/jobs/<id>.log). A history
+        # entry and its log are one artefact with two files, so whatever
+        # deletes one must delete the other — otherwise the logs outlive every
+        # history purge and grow without bound.
+        self.log_dir = Path(status_dir) / "logs" / "jobs"
+        self.history_max_entries = history_max_entries
+        self.history_max_age_days = history_max_age_days
         self.root.mkdir(parents=True, exist_ok=True)
         self.history_dir.mkdir(parents=True, exist_ok=True)
         if not self.queue_file.exists():
@@ -128,11 +151,12 @@ class JobManager:
         return Job(**raw) if raw else None
 
     def complete(self, job: Job) -> None:
-        """Move the current job into history."""
+        """Move the current job into history, then apply the retention window."""
         job.finished_at = _utcnow()
         with self._locked():
             self._write(self.current_file, None)
             self._write(self.history_dir / f"{job.id}.json", job.to_dict())
+            self._prune_history_locked()
 
     def cancel(self, job_id: str) -> bool:
         """Cancel a job. Returns True if cancelled from the queue (not-yet-started).
@@ -191,6 +215,72 @@ class JobManager:
                 self._write(self.history_dir / f"{entry['id']}.json", entry)
             return len(removed)
 
+    def _delete_entry(self, path: Path) -> None:
+        """Delete one history file together with the job log it belongs to."""
+        path.unlink(missing_ok=True)
+        (self.log_dir / f"{path.stem}.log").unlink(missing_ok=True)
+
+    def _prune_history_locked(self) -> int:
+        """Drop history past the retention window. Caller must hold the lock.
+
+        Two bounds, whichever bites first: keep at most `history_max_entries`
+        newest jobs, and drop anything older than `history_max_age_days`. Both
+        are needed — the count bound alone lets an idle deployment hoard stale
+        jobs, the age bound alone lets a 5-minute failure loop pile up
+        thousands within its window.
+        """
+        try:
+            entries = [(p, p.stat().st_mtime) for p in self.history_dir.glob("*.json")]
+        except OSError:
+            return 0
+        entries.sort(key=lambda pair: pair[1], reverse=True)
+        cutoff = time.time() - self.history_max_age_days * 86400
+        stale = [p for p, _ in entries[self.history_max_entries :]]
+        stale += [p for p, mtime in entries[: self.history_max_entries] if mtime < cutoff]
+
+        deleted = 0
+        for path in stale:
+            try:
+                self._delete_entry(path)
+                deleted += 1
+            except OSError as exc:
+                logger.warning("Could not prune job history %s: %s", path.name, exc)
+
+        deleted += self._delete_orphan_logs_locked()
+        if deleted:
+            logger.info("Pruned %d job history entries / logs", deleted)
+        return deleted
+
+    def _delete_orphan_logs_locked(self) -> int:
+        """Delete job logs no longer backed by a job. Caller must hold the lock.
+
+        `clear_history` used to leave the logs behind, so a deployment can carry
+        years of orphans that history-driven pruning would never reach. A log is
+        an orphan only if no history entry, no queue entry, and not the running
+        job claim it — the running job's log exists well before its history file
+        does, and must not be swept out from under it.
+        """
+        claimed = {p.stem for p in self.history_dir.glob("*.json")}
+        current = self._read(self.current_file)
+        if current:
+            claimed.add(current["id"])
+        claimed.update(entry["id"] for entry in self._read(self.queue_file) or [])
+
+        deleted = 0
+        try:
+            logs = list(self.log_dir.glob("*.log"))
+        except OSError:
+            return 0
+        for log in logs:
+            if log.stem in claimed:
+                continue
+            try:
+                log.unlink(missing_ok=True)
+                deleted += 1
+            except OSError as exc:
+                logger.warning("Could not prune orphaned job log %s: %s", log.name, exc)
+        return deleted
+
     def clear_history(self, parliament: str | None = None) -> int:
         """Delete history files, scoped to `parliament` when given. Returns count."""
         with self._locked():
@@ -200,9 +290,25 @@ class JobManager:
                     data = self._read(path)
                     if not data or data.get("parliament") != parliament:
                         continue
-                path.unlink()
+                self._delete_entry(path)
                 deleted += 1
             return deleted
+
+    def consecutive_failures(self, schedule_id: str, limit: int = 50) -> int:
+        """How many of this schedule's most recent runs failed back-to-back.
+
+        Read from history rather than an in-memory counter so the count
+        survives a container restart — a schedule hammering a broken host is
+        precisely the case where the app may be restarted mid-storm.
+        """
+        count = 0
+        for entry in self.list_history(limit=limit):
+            if not entry or entry.get("schedule_id") != schedule_id:
+                continue
+            if entry.get("status") != "failed":
+                break
+            count += 1
+        return count
 
     def list_queue(self) -> list[dict[str, Any]]:
         return self._read(self.queue_file) or []

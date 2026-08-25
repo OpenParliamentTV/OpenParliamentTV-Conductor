@@ -10,11 +10,13 @@ import types
 from pathlib import Path
 
 import pytest
+import yaml
 
 from src.config import (
     AppConfig,
     ParliamentConfig,
     ParliamentStages,
+    ScheduleConfig,
     Settings,
     SlackConfig,
 )
@@ -334,3 +336,104 @@ def test_build_argv_refreshes_entity_registry_every_job(tmp_path):
     parliament.entity_dump_url = "https://example.org/dump.json"
     argv = runner._build_argv(job, parliament, ["nel"])
     assert "--nel-entity-url=https://example.org/dump.json" in argv
+
+
+def _patch_pids_usage(monkeypatch, fake) -> None:
+    """Replace the runner module's `_pids_usage` for one test.
+
+    Patched through `WorkflowRunner`'s own globals rather than by dotted name:
+    test_api.py drops every `src.*` entry from sys.modules to re-import under
+    different env vars, so `monkeypatch.setattr("src.workflow.runner...")` can
+    patch a freshly imported module object while the `WorkflowRunner` this file
+    imported still resolves `_pids_usage` from the original one.
+    """
+    monkeypatch.setitem(WorkflowRunner.run_job.__globals__, "_pids_usage", fake)
+
+
+def _runner_with_schedule(tmp_path, monkeypatch, *, pids=(4090, 4096)):
+    """Runner whose host reports almost no free pids, plus a `nightly` schedule."""
+    tools_dir = tmp_path / "tools"
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+    _write_fake_workflow_script(tools_dir)
+    _install_fake_common_in_sys_modules()
+
+    app_config = _make_app_config(tmp_path, tools_dir, data_dir)
+    app_config.schedules = {
+        "nightly": ScheduleConfig(parliament="XX", cron="*/5 * * * *", stages=["merge"])
+    }
+    _patch_pids_usage(monkeypatch, lambda: pids)
+
+    jm = JobManager(tmp_path / "status")
+    streamer = LogStreamer(tmp_path / "status")
+    return WorkflowRunner(app_config, jm, streamer, notifier=None), jm, streamer, app_config
+
+
+@pytest.mark.asyncio
+async def test_pipeline_refuses_to_start_without_process_headroom(tmp_path, monkeypatch):
+    """A host that can't fork fails the job immediately, before spawning.
+
+    The real failure mode buried this in an OpenBLAS thread error and a numpy
+    traceback from inside the workflow — unreadable, and misattributed to the
+    pipeline.
+    """
+    runner, jm, streamer, _ = _runner_with_schedule(tmp_path, monkeypatch)
+
+    job = Job.new(parliament="XX", stages=["merge"], period=21)
+    jm.enqueue(job)
+    popped = jm.dequeue()
+    await runner.run_job(popped)
+
+    assert popped.status == "failed"
+    assert "process slots" in popped.error
+    assert "pids 4090/4096" in popped.error
+    # The workflow subprocess never ran, so none of its output is in the log.
+    assert "Publishing" not in streamer.read(popped.id)
+
+
+@pytest.mark.asyncio
+async def test_schedule_pauses_itself_after_repeated_failures(tmp_path, monkeypatch):
+    runner, jm, streamer, app_config = _runner_with_schedule(tmp_path, monkeypatch)
+    sched = app_config.schedules["nightly"]
+
+    async def run_one():
+        job = Job.new(parliament="XX", stages=["merge"], period=21)
+        job.schedule_id = "nightly"
+        job.source = "scheduled"
+        jm.enqueue(job)
+        popped = jm.dequeue()
+        await runner.run_job(popped)
+        return popped
+
+    first = await run_one()
+    assert first.status == "failed"
+    assert sched.enabled is True  # one failure is not a pattern
+
+    await run_one()
+    assert sched.enabled is True
+
+    third = await run_one()
+    assert sched.enabled is False
+    assert "paused automatically after 3 consecutive failures" in streamer.read(third.id)
+
+    # Persisted the way the UI persists it, so the pause survives a restart.
+    written = yaml.safe_load((tmp_path / "schedules.yaml").read_text())
+    assert written["schedules"]["nightly"]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_healthy_host_is_not_blocked_by_the_preflight(tmp_path, monkeypatch):
+    """Plenty of headroom (and an absent pids cgroup) must both run normally."""
+    runner, jm, _, _ = _runner_with_schedule(tmp_path, monkeypatch, pids=(50, 4096))
+    job = Job.new(parliament="XX", stages=["merge"], period=21)
+    jm.enqueue(job)
+    popped = jm.dequeue()
+    await runner.run_job(popped)
+    assert popped.status == "completed"
+
+    _patch_pids_usage(monkeypatch, lambda: None)
+    job2 = Job.new(parliament="XX", stages=["merge"], period=21)
+    jm.enqueue(job2)
+    popped2 = jm.dequeue()
+    await runner.run_job(popped2)
+    assert popped2.status == "completed"

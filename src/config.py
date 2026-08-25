@@ -347,6 +347,25 @@ class AppConfig:
                 )
 
 
+def save_schedules(config: AppConfig) -> None:
+    """Serialize the in-memory schedules back into schedules.yaml.
+
+    schedules.yaml is the one config file the app rewrites itself, and it is
+    bind-mounted read-write for exactly that reason (see docker-compose.yml) —
+    pausing a schedule has to survive a restart, or a rebuild silently turns
+    the cron back on. Writing the file also trips the `watchfiles` watcher in
+    SchedulerService, which reloads the config and re-syncs the cron triggers,
+    so callers do not touch the scheduler themselves.
+    """
+    data = {
+        "schedules": {
+            sid: sched.model_dump(exclude_none=True) for sid, sched in config.schedules.items()
+        }
+    }
+    path = config.config_dir / "schedules.yaml"
+    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()

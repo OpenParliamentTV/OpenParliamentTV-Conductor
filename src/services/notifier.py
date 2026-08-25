@@ -58,6 +58,17 @@ class SlackNotifier:
         message = self._build_message(result)
         return await self._send(message)
 
+    async def notify_text(self, text: str) -> bool:
+        """Send a plain operational message that isn't about one job's result.
+
+        Deliberately skips the per-outcome `on_success`/`on_failure` gates —
+        those tune job reporting, and an operator who turned job failures off
+        still needs to hear that a schedule paused itself.
+        """
+        if not self.webhook_url or not self.config.enabled:
+            return False
+        return await self._send({"text": text})
+
     def _build_message(self, result: JobResult) -> dict:
         job_url = f"{self.base_url}/jobs/{result.job_id}"
         duration = self._format_duration(result.duration_seconds)

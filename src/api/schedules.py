@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from src.auth.dependencies import require_role
-from src.config import AppConfig, get_config
+from src.config import AppConfig, get_config, save_schedules
 from src.services.registry import registry
 
 router = APIRouter(prefix="/api/parliaments/{parliament_id}/schedules", tags=["schedules"])
@@ -42,17 +41,6 @@ async def list_schedules(
     }
 
 
-def _rewrite_schedules_file(config: AppConfig) -> None:
-    """Serialize the current in-memory schedules back into schedules.yaml."""
-    data = {
-        "schedules": {
-            sid: sched.model_dump(exclude_none=True) for sid, sched in config.schedules.items()
-        }
-    }
-    path = config.config_dir / "schedules.yaml"
-    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
-
-
 @router.post("/{schedule_id}/enable")
 async def enable_schedule(
     parliament_id: str,
@@ -66,7 +54,7 @@ async def enable_schedule(
         raise HTTPException(status_code=404, detail="Unknown schedule")
     sched.enabled = body.enabled
     try:
-        _rewrite_schedules_file(config)
+        save_schedules(config)
     except OSError as exc:
         # Persisting failed (e.g. config mounted read-only). Roll back the
         # in-memory flag so the UI doesn't show a pause that won't survive a

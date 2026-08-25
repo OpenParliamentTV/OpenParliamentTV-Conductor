@@ -10,6 +10,15 @@ Strategy:
   4. For the optional `publish` stage, run `git add/commit/push` in the data_dir
      using `GIT_USER_NAME`/`GIT_USER_EMAIL` from settings (no global git config).
 
+Host resource exhaustion: when the box runs out of process slots, every spawn
+fails with EAGAIN — git can't fork, and the workflow dies importing numpy
+because OpenBLAS can't start its threads. That is not a pipeline fault and
+retrying cannot fix it, so `_run_pipeline` checks the pids cgroup before
+spawning (a file read, not a fork — the check has to work on a host that is
+already out of slots) and raises `HostResourceError` instead of running a
+doomed job. A schedule that keeps failing is paused automatically; see
+`_maybe_pause_schedule`.
+
 Cancellation: a background task watches the cancellation flag and terminates
 the subprocess on signal (SIGTERM, then SIGKILL after a 10s grace period). The
 workflow runs in its own process group (`start_new_session=True`) and the signal
@@ -23,6 +32,7 @@ forever (the job would then never leave the `cancelling` state).
 from __future__ import annotations
 
 import asyncio
+import errno
 import importlib
 import logging
 import os
@@ -34,7 +44,7 @@ import sys
 import time
 from pathlib import Path
 
-from src.config import AppConfig, ParliamentConfig
+from src.config import AppConfig, ParliamentConfig, save_schedules
 from src.services.job_manager import Job, JobManager
 from src.services.log_streamer import LogStreamer
 from src.services.notifier import JobResult, SlackNotifier
@@ -48,6 +58,49 @@ _PIPELINE_STAGES = {"download", "parse", "merge", "nel", "align", "ner"}
 
 # Grace period after SIGTERM before we SIGKILL on cancellation.
 _CANCEL_GRACE_SECONDS = 10
+
+# Consecutive failed runs after which a schedule pauses itself.
+_MAX_CONSECUTIVE_FAILURES = 3
+
+# pids cgroup, v2 layout first then v1. Read, never forked — the whole point is
+# to answer "can we still start processes?" on a host where we can't.
+_PIDS_CURRENT_PATHS = ("/sys/fs/cgroup/pids.current", "/sys/fs/cgroup/pids/pids.current")
+_PIDS_MAX_PATHS = ("/sys/fs/cgroup/pids.max", "/sys/fs/cgroup/pids/pids.max")
+
+# Refuse to start a pipeline with less than this many pids left. An align job
+# runs parent + spawned aeneas child + ffmpeg, each with its own thread pools,
+# so starting with a near-empty budget just fails further in and more noisily.
+_PIDS_MIN_HEADROOM = 64
+
+
+class HostResourceError(RuntimeError):
+    """The host cannot start processes — no point running (or retrying) a job."""
+
+
+def _read_first_line(paths: tuple[str, ...]) -> str | None:
+    for path in paths:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+    return None
+
+
+def _pids_usage() -> tuple[int, int] | None:
+    """Return (current, max) for this container's pids cgroup.
+
+    None when the controller is absent or unlimited (`max`), which is also the
+    normal case outside a container — callers then just skip the preflight and
+    rely on spawn-time EAGAIN classification instead.
+    """
+    current = _read_first_line(_PIDS_CURRENT_PATHS)
+    maximum = _read_first_line(_PIDS_MAX_PATHS)
+    if current is None or maximum is None or maximum == "max":
+        return None
+    try:
+        return int(current), int(maximum)
+    except ValueError:
+        return None
 
 
 class WorkflowRunner:
@@ -99,6 +152,9 @@ class WorkflowRunner:
         job.progress = 100
         self.job_manager.complete(job)
         await self.log_streamer.append(job.id, f"=== Job {job.id} finished: {job.status}")
+
+        # After complete(), so this run is part of the history it counts.
+        await self._maybe_pause_schedule(job)
 
         if self.notifier:
             duration = int(time.time() - started)
@@ -198,6 +254,67 @@ class WorkflowRunner:
                 todo += 1
         return todo
 
+    async def _check_process_headroom(self, job: Job) -> None:
+        """Abort before spawning if the host has no process slots left.
+
+        Without this the job runs anyway and fails deep inside the workflow's
+        numpy import, with an OpenBLAS thread-creation error and a traceback
+        that looks like a pipeline bug. The cause is the host, so say so, in
+        one line, before doing any work.
+        """
+        usage = _pids_usage()
+        if usage is None:
+            return
+        current, maximum = usage
+        if maximum - current >= _PIDS_MIN_HEADROOM:
+            return
+        raise HostResourceError(
+            f"host is out of process slots (pids {current}/{maximum}) — not starting "
+            f"the workflow. Free processes on the host or raise the container's "
+            f"pids limit, then re-run."
+        )
+
+    async def _maybe_pause_schedule(self, job: Job) -> None:
+        """Pause a schedule that has failed `_MAX_CONSECUTIVE_FAILURES` times.
+
+        A cron firing every few minutes against a broken host retries forever:
+        it cannot fix itself, each run writes another job log, and the noise
+        buries the first failure — the only one that explains anything. Pausing
+        is reversible from the UI and is persisted the same way the UI persists
+        it, so the pause survives a restart or rebuild.
+        """
+        if job.status != "failed" or not job.schedule_id:
+            return
+        failures = self.job_manager.consecutive_failures(job.schedule_id)
+        if failures < _MAX_CONSECUTIVE_FAILURES:
+            return
+        sched = self.config.schedules.get(job.schedule_id)
+        if sched is None or not sched.enabled:
+            return
+
+        sched.enabled = False
+        try:
+            save_schedules(self.config)
+        except OSError as exc:
+            # Read-only config mount: roll back so the UI doesn't show a pause
+            # that isn't real. The storm continues, but visibly.
+            sched.enabled = True
+            logger.error("Could not pause schedule %s: %s", job.schedule_id, exc)
+            await self.log_streamer.append(
+                job.id, f"!! Could not pause schedule '{job.schedule_id}': {exc}"
+            )
+            return
+
+        message = (
+            f"Schedule '{job.schedule_id}' paused automatically after {failures} "
+            f"consecutive failures. Last error: {job.error or 'unknown'}. "
+            f"Fix the cause, then re-enable it from the schedules page."
+        )
+        logger.error(message)
+        await self.log_streamer.append(job.id, f"!!! {message}")
+        if self.notifier:
+            await self.notifier.notify_text(f":rotating_light: {message}")
+
     async def _pull_repos(self, job: Job, parliament: ParliamentConfig) -> None:
         """Git-pull Tools and Data before running the pipeline.
 
@@ -237,6 +354,7 @@ class WorkflowRunner:
         parliament: ParliamentConfig,
         stages: list[str],
     ) -> None:
+        await self._check_process_headroom(job)
         await self._pull_repos(job, parliament)
 
         argv = self._build_argv(job, parliament, stages)
@@ -244,6 +362,14 @@ class WorkflowRunner:
 
         env = {**os.environ}
         env["PYTHONPATH"] = str(tools_dir) + os.pathsep + env.get("PYTHONPATH", "")
+        # Cap the BLAS pools. numpy/OpenBLAS starts one thread per core in every
+        # process that imports it, and alignment imports it twice over (the
+        # workflow parent plus a freshly spawned aeneas child per speech). None
+        # of that work is BLAS-bound and the pipeline is serial per speech, so
+        # the pools buy nothing and cost a 4x thread multiplier on a 4-core Pi.
+        # setdefault, so an operator can still override from secrets.env.
+        for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+            env.setdefault(var, "1")
 
         cmd = [sys.executable, "-u", "-m", f"optv.parliaments.{job.parliament}.workflow", *argv]
 
@@ -251,14 +377,23 @@ class WorkflowRunner:
         self.job_manager.set_current(job)
         await self.log_streamer.append(job.id, f"$ {shlex.join(cmd)}  (cwd={tools_dir})")
 
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=str(tools_dir),
-            env=env,
-            start_new_session=True,  # own process group, so cancel can kill ffmpeg/aeneas too
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=str(tools_dir),
+                env=env,
+                start_new_session=True,  # own process group, so cancel can kill ffmpeg/aeneas too
+            )
+        except (OSError, RuntimeError) as exc:
+            # EAGAIN/ENOMEM from fork, or "can't start new thread" from
+            # asyncio's per-subprocess reaper thread — both mean the host is
+            # full, not that the workflow is broken. Anything else (a missing
+            # interpreter, a bad cwd) is a real error and must stay one.
+            if isinstance(exc, OSError) and exc.errno not in (errno.EAGAIN, errno.ENOMEM):
+                raise
+            raise HostResourceError(f"could not start the workflow process: {exc}") from exc
 
         watcher = asyncio.create_task(self._watch_cancellation(job, proc))
         seen_sessions: set[tuple[str, str]] = set()
