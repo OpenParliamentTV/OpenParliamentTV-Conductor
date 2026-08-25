@@ -3,6 +3,7 @@ its stdout into the job log, and bumps progress on each session message."""
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import sys
 import textwrap
@@ -437,3 +438,52 @@ async def test_healthy_host_is_not_blocked_by_the_preflight(tmp_path, monkeypatc
     popped2 = jm.dequeue()
     await runner.run_job(popped2)
     assert popped2.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_fork_failure_during_git_pull_is_reported_as_host_exhaustion(tmp_path, monkeypatch):
+    """A host too full to fork `git` must not surface as a bare BlockingIOError.
+
+    Observed in production: the pids cgroup read as unlimited, so the preflight
+    passed, and the job died on the best-effort `git pull` with
+    `BlockingIOError: [Errno 11] Resource temporarily unavailable` and no clue
+    which command failed or why.
+    """
+    runner, jm, streamer, _ = _runner_with_schedule(tmp_path, monkeypatch, pids=None)
+
+    async def refuse_to_fork(*_args, **_kwargs):
+        raise BlockingIOError(11, "Resource temporarily unavailable")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", refuse_to_fork)
+
+    job = Job.new(parliament="XX", stages=["merge"], period=21)
+    jm.enqueue(job)
+    popped = jm.dequeue()
+    await runner.run_job(popped)
+
+    assert popped.status == "failed"
+    assert "HostResourceError" in popped.error
+    assert "host cannot start new processes" in popped.error
+    assert "git pull --ff-only" in popped.error
+
+
+@pytest.mark.asyncio
+async def test_missing_git_binary_still_only_warns(tmp_path, monkeypatch):
+    """Pulling stays best-effort for ordinary errors — only exhaustion aborts."""
+    runner, jm, streamer, _ = _runner_with_schedule(tmp_path, monkeypatch, pids=None)
+    real_exec = asyncio.create_subprocess_exec
+
+    async def fail_git_only(*args, **kwargs):
+        if args and args[0] == "git":
+            raise FileNotFoundError(2, "No such file or directory")
+        return await real_exec(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fail_git_only)
+
+    job = Job.new(parliament="XX", stages=["merge"], period=21)
+    jm.enqueue(job)
+    popped = jm.dequeue()
+    await runner.run_job(popped)
+
+    assert popped.status == "completed"
+    assert "git not found" in streamer.read(popped.id)

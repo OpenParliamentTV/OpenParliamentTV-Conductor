@@ -13,11 +13,12 @@ Strategy:
 Host resource exhaustion: when the box runs out of process slots, every spawn
 fails with EAGAIN — git can't fork, and the workflow dies importing numpy
 because OpenBLAS can't start its threads. That is not a pipeline fault and
-retrying cannot fix it, so `_run_pipeline` checks the pids cgroup before
-spawning (a file read, not a fork — the check has to work on a host that is
+retrying cannot fix it, so `run_job` checks the pids cgroup before doing
+anything (a file read, not a fork — the check has to work on a host that is
 already out of slots) and raises `HostResourceError` instead of running a
-doomed job. A schedule that keeps failing is paused automatically; see
-`_maybe_pause_schedule`.
+doomed job. Where the cgroup is unreadable or unlimited, `_spawn` classifies
+EAGAIN/ENOMEM at spawn time into the same error. A schedule that keeps failing
+is paused automatically; see `_maybe_pause_schedule`.
 
 Cancellation: a background task watches the cancellation flag and terminates
 the subprocess on signal (SIGTERM, then SIGKILL after a 10s grace period). The
@@ -43,6 +44,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from src.config import AppConfig, ParliamentConfig, save_schedules
 from src.services.job_manager import Job, JobManager
@@ -125,6 +127,7 @@ class WorkflowRunner:
         publish_requested = "publish" in job.stages or (job.publish_on_success and pipeline_stages)
 
         try:
+            await self._check_process_headroom(job)
             if pipeline_stages:
                 # Iterates every session calling Tools' status checks — can take
                 # seconds on a large data dir. Run it off the event loop so the
@@ -254,6 +257,36 @@ class WorkflowRunner:
                 todo += 1
         return todo
 
+    @staticmethod
+    async def _spawn(*cmd: str, **kwargs: Any) -> asyncio.subprocess.Process:
+        """`create_subprocess_exec` that names host exhaustion for what it is.
+
+        EAGAIN/ENOMEM from fork, and RuntimeError from asyncio's per-subprocess
+        reaper thread, both mean the same thing: the host has no room to start
+        a process. Unwrapped they surface as a bare
+        `BlockingIOError: [Errno 11] Resource temporarily unavailable` with no
+        indication of which command or why — and, from `_pull_repos`, as a job
+        that dies on a best-effort git pull. Every other OSError (a missing
+        binary, a bad cwd) is re-raised untouched so callers can still handle
+        it themselves.
+        """
+        try:
+            return await asyncio.create_subprocess_exec(*cmd, **kwargs)
+        except (OSError, RuntimeError) as exc:
+            # BlockingIOError is Python's own mapping of EAGAIN/EWOULDBLOCK —
+            # matched by type rather than by number, since errno.EAGAIN is 11 on
+            # Linux but 35 on macOS. ENOMEM is the out-of-memory variant, and
+            # RuntimeError is asyncio failing to start the reaper thread it
+            # needs per subprocess.
+            exhausted = isinstance(exc, (BlockingIOError, RuntimeError)) or (
+                isinstance(exc, OSError) and exc.errno == errno.ENOMEM
+            )
+            if not exhausted:
+                raise
+            raise HostResourceError(
+                f"host cannot start new processes — `{shlex.join(cmd)}` failed with {exc}"
+            ) from exc
+
     async def _check_process_headroom(self, job: Job) -> None:
         """Abort before spawning if the host has no process slots left.
 
@@ -330,7 +363,7 @@ class WorkflowRunner:
             cmd = ["git", "pull", "--ff-only"]
             await self.log_streamer.append(job.id, f"$ {shlex.join(cmd)}  (cwd={repo_dir} = {label})")
             try:
-                proc = await asyncio.create_subprocess_exec(
+                proc = await self._spawn(
                     *cmd,
                     cwd=str(repo_dir),
                     stdout=asyncio.subprocess.PIPE,
@@ -354,7 +387,6 @@ class WorkflowRunner:
         parliament: ParliamentConfig,
         stages: list[str],
     ) -> None:
-        await self._check_process_headroom(job)
         await self._pull_repos(job, parliament)
 
         argv = self._build_argv(job, parliament, stages)
@@ -377,23 +409,14 @@ class WorkflowRunner:
         self.job_manager.set_current(job)
         await self.log_streamer.append(job.id, f"$ {shlex.join(cmd)}  (cwd={tools_dir})")
 
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                cwd=str(tools_dir),
-                env=env,
-                start_new_session=True,  # own process group, so cancel can kill ffmpeg/aeneas too
-            )
-        except (OSError, RuntimeError) as exc:
-            # EAGAIN/ENOMEM from fork, or "can't start new thread" from
-            # asyncio's per-subprocess reaper thread — both mean the host is
-            # full, not that the workflow is broken. Anything else (a missing
-            # interpreter, a bad cwd) is a real error and must stay one.
-            if isinstance(exc, OSError) and exc.errno not in (errno.EAGAIN, errno.ENOMEM):
-                raise
-            raise HostResourceError(f"could not start the workflow process: {exc}") from exc
+        proc = await self._spawn(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=str(tools_dir),
+            env=env,
+            start_new_session=True,  # own process group, so cancel can kill ffmpeg/aeneas too
+        )
 
         watcher = asyncio.create_task(self._watch_cancellation(job, proc))
         seen_sessions: set[tuple[str, str]] = set()
