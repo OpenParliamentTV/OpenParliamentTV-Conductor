@@ -62,8 +62,11 @@ _PIPELINE_STAGES = {"download", "parse", "merge", "nel", "align", "ner"}
 # Grace period after SIGTERM before we SIGKILL on cancellation.
 _CANCEL_GRACE_SECONDS = 10
 
-# Consecutive failed runs after which a schedule pauses itself.
-_MAX_CONSECUTIVE_FAILURES = 3
+# Consecutive failed runs after which a schedule pauses itself. At the DE
+# cadence (every 5 minutes) this is ~50 minutes of retrying before giving up —
+# long enough to ride out a transient outage, short enough that a genuinely
+# broken host produces ten failures and a notification rather than thousands.
+_MAX_CONSECUTIVE_FAILURES = 10
 
 # pids cgroup, v2 layout first then v1. Read, never forked — the whole point is
 # to answer "can we still start processes?" on a host where we can't.

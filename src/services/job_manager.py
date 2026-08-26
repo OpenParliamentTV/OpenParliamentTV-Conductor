@@ -24,10 +24,20 @@ from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
 
-# History retention. A schedule firing every few minutes writes one history
-# file and one job log per run — ~300/day, forever, since nothing used to
-# delete them. Keep enough to debug a bad week, drop the rest.
-_HISTORY_MAX_ENTRIES = 500
+# History retention. Every run writes one history file and one job log, and
+# nothing used to delete either.
+#
+# Age is the policy: keep a month, which is what you want when asking "when did
+# this start going wrong?". The count is only a backstop against a schedule that
+# fires far more often than any of ours.
+#
+# DE cadence (`*/5 9-21 * * 1-5`): 12/hour x 13 hours = 156 per *weekday*, and a
+# 30-day window holds ~21.4 weekdays, so ~3,350 entries — comfortably under the
+# backstop, which is the point: the age bound is the one that bites. Coalescing
+# (a tick is skipped while the previous run is still going) makes that an upper
+# bound. Set the count anywhere near the real rate and it silently becomes the
+# real policy — 500 would have been about three days.
+_HISTORY_MAX_ENTRIES = 5000
 _HISTORY_MAX_AGE_DAYS = 30
 
 

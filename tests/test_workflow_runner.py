@@ -23,7 +23,7 @@ from src.config import (
 )
 from src.services.job_manager import Job, JobManager
 from src.services.log_streamer import LogStreamer
-from src.workflow.runner import WorkflowRunner
+from src.workflow.runner import _MAX_CONSECUTIVE_FAILURES, WorkflowRunner
 
 
 def _install_fake_common_in_sys_modules() -> None:
@@ -406,16 +406,19 @@ async def test_schedule_pauses_itself_after_repeated_failures(tmp_path, monkeypa
         await runner.run_job(popped)
         return popped
 
-    first = await run_one()
-    assert first.status == "failed"
-    assert sched.enabled is True  # one failure is not a pattern
+    # Driven by the constant, not a hardcoded count, so retuning the threshold
+    # doesn't silently leave a test asserting the old behaviour.
+    for attempt in range(1, _MAX_CONSECUTIVE_FAILURES):
+        job = await run_one()
+        assert job.status == "failed"
+        assert sched.enabled is True, f"paused after only {attempt} failure(s)"
 
-    await run_one()
-    assert sched.enabled is True
-
-    third = await run_one()
+    last = await run_one()
     assert sched.enabled is False
-    assert "paused automatically after 3 consecutive failures" in streamer.read(third.id)
+    assert (
+        f"paused automatically after {_MAX_CONSECUTIVE_FAILURES} consecutive failures"
+        in streamer.read(last.id)
+    )
 
     # Persisted the way the UI persists it, so the pause survives a restart.
     written = yaml.safe_load((tmp_path / "schedules.yaml").read_text())
