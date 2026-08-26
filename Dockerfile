@@ -36,6 +36,14 @@ RUN mkdir -p /app/status /app/logs
 # Make Tools importable without editing sys.path in app code
 ENV PYTHONPATH="/data/OpenParliamentTV-Tools:${PYTHONPATH}"
 
+# Build provenance — the image carries no git checkout, so this is the only way
+# it can name the commit it came from. Declared after COPY src/ deliberately:
+# the value changes on every commit, and the layers below it are the cheap ones.
+# Putting it any earlier would invalidate the apt/pip/spacy-model layers and turn
+# a 10-second rebuild into a very long one on a Raspberry Pi.
+ARG GIT_SHA=unknown
+ENV CONDUCTOR_COMMIT=$GIT_SHA
+
 EXPOSE 8000
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

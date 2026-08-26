@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src import __version__
+from src import __commit__, __version__
 
 
 @pytest.fixture
@@ -162,6 +162,10 @@ def test_health(app_client):
     # (see /health docstring) — dropping either breaks that check silently.
     assert body["version"] == __version__
     assert body["started_at"]
+    # None on an unstamped image (no GIT_SHA build arg), the SHA otherwise —
+    # the key itself must always be present, since its absence is what
+    # identifies a pre-stamping build.
+    assert "commit" in body and body["commit"] == __commit__
 
 
 def test_auth_me(app_client):

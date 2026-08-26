@@ -67,5 +67,10 @@ if [ "$BEFORE" = "$AFTER" ]; then
 fi
 
 log "Updated $BEFORE -> $AFTER — rebuilding app container"
+# Stamp the image with the commit being deployed; docker-compose.yml passes this
+# through as a build arg and /health reports it back. Note this line only takes
+# effect the run AFTER it is first pulled: cron executes the copy of this script
+# that was already on disk, and the pull above replaces it mid-run.
+export GIT_SHA="$AFTER"
 "${COMPOSE[@]}" up -d --build app
 log "Done"

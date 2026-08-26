@@ -1,0 +1,20 @@
+# Build context allowlist.
+#
+# Without this file the context is the whole project directory — including
+# `data/`, which holds the cloned Tools and Data repos and the entity-fishing
+# knowledge base. That is tens of gigabytes walked and hashed on every
+# `docker compose up -d --build`, to build an image that needs two paths.
+#
+# Deny everything, then re-admit exactly what the Dockerfile COPYs. `*` matches
+# a single path segment, so it excludes top-level entries only; re-admitting a
+# directory brings its contents with it. Keep this in step with the Dockerfile:
+# adding a COPY without a matching `!` line here fails the build with
+# "file not found in build context".
+*
+
+!requirements.txt
+!src
+
+# Byte-code that travels with a working checkout; `src/` is copied wholesale.
+src/**/__pycache__
+src/**/*.pyc

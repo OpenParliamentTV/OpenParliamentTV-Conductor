@@ -58,7 +58,13 @@ Jobs flow through a **file-backed queue** (not a database) in `status/jobs/`:
 
 ### Verifying a deploy
 
-The image carries no git checkout (the Dockerfile copies `src/` only), so `__version__` in [src/\_\_init\_\_.py](src/__init__.py) is the only thing that identifies the running code. `GET /health` returns it plus `started_at` (process start = when the container was last recreated), unauthenticated and proxied through nginx — so a deployment you can only reach by URL can still be checked in a browser. Every job log opens with the same version. Bump `__version__` when pushing something whose arrival you need to confirm.
+The image carries no git checkout (the Dockerfile copies `src/` only), so build identity has to be stamped in at build time. `GET /health` reports it — unauthenticated and proxied through nginx, so a deployment you can only reach by URL is still checkable in a browser:
+
+- `commit` — the git SHA, from the Dockerfile's `GIT_SHA` build arg, which [scripts/self-update.sh](scripts/self-update.sh) fills with the commit it just pulled. Null for images built any other way. **The `ARG`/`ENV` pair sits at the bottom of the Dockerfile on purpose**: the value changes every commit, and anything above it (apt, pip, the spaCy model) must stay cached or a Pi rebuild goes from seconds to very long.
+- `version` — `__version__` in [src/\_\_init\_\_.py](src/__init__.py), hand-set. Still the fallback that answers "did my push land?" on an unstamped image; bump it when that matters. Every job log's first line carries it.
+- `started_at` — process start, i.e. when the container was last recreated.
+
+Note that changes to `self-update.sh` take effect only on the **run after** they are pulled: cron executes the copy already on disk, and the pull replaces it mid-run.
 
 ### Stages
 

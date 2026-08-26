@@ -1,6 +1,13 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Commit the image was built from, reported by /health. scripts/self-update.sh
+        # exports GIT_SHA right before `compose up`; a build started any other way
+        # (a manual `docker compose up --build`) falls back to "unknown" rather than
+        # claiming a commit it can't know.
+        GIT_SHA: ${GIT_SHA:-unknown}
     container_name: openparliamenttv-conductor
     restart: unless-stopped
     env_file:

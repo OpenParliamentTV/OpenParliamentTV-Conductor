@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from src import __version__
+from src import __commit__, __version__
 from src.api.jobs import router as jobs_router
 from src.api.parliaments import router as parliaments_router
 from src.api.schedules import router as schedules_router
@@ -104,12 +104,19 @@ app.include_router(pages_router)
 
 @app.get("/health")
 async def health() -> dict:
-    """Liveness plus the two facts you need to verify a deploy from outside.
+    """Liveness plus what you need to verify a deploy from outside.
 
-    `version` says which code is running — an image built from older source
-    won't have the field at all. `started_at` is when this process began, i.e.
-    when the container was last recreated, which is what `scripts/self-update.sh`
-    does after a pull. Both are readable in a browser without authentication,
-    which matters when the only access to a deployment is its URL.
+    `commit` is the git SHA the image was built from, or null when nothing
+    stamped it. `version` is the hand-set fallback that answers "did my push
+    land?" even on an unstamped image. `started_at` is when this process began,
+    i.e. when the container was last recreated, which is what
+    `scripts/self-update.sh` does after a pull. All three are readable in a
+    browser without authentication, which matters when the only access to a
+    deployment is its URL.
     """
-    return {"status": "healthy", "version": __version__, "started_at": _STARTED_AT}
+    return {
+        "status": "healthy",
+        "commit": __commit__,
+        "version": __version__,
+        "started_at": _STARTED_AT,
+    }
