@@ -27,18 +27,26 @@ logger = logging.getLogger(__name__)
 # History retention. Every run writes one history file and one job log, and
 # nothing used to delete either.
 #
-# Age is the policy: keep a month, which is what you want when asking "when did
-# this start going wrong?". The count is only a backstop against a schedule that
-# fires far more often than any of ours.
+# Two bounds, and which one binds depends on whether jobs are running.
 #
-# DE cadence (`*/5 9-21 * * 1-5`): 12/hour x 13 hours = 156 per *weekday*, and a
-# 30-day window holds ~21.4 weekdays, so ~3,350 entries — comfortably under the
-# backstop, which is the point: the age bound is the one that bites. Coalescing
-# (a tick is skipped while the previous run is still going) makes that an upper
-# bound. Set the count anywhere near the real rate and it silently becomes the
-# real policy — 500 would have been about three days.
+# The age bound is sized for the *quiet* case. A schedule that pauses itself
+# after repeated failures stops producing jobs — and since pruning only happens
+# in `complete()`, nothing is deleted while it stays paused. The danger is the
+# first job someone runs when they finally investigate: that prune fires against
+# failure logs that are now weeks old. 90 days means a fault can sit unnoticed
+# for a quarter and the evidence still survives the moment you come back to it.
+# Those logs are also the newest entries at that point, so the count bound can't
+# evict them either.
+#
+# The count bound is sized for the *busy* case, as a backstop. DE cadence
+# (`*/5 9-21 * * 1-5`) is 12/hour x 13 hours = 156 per *weekday*; 5,000 entries
+# is therefore ~32 weekdays, i.e. ~45 calendar days of continuous running rather
+# than the full 90. That trade is deliberate — history during normal operation
+# is mostly no-op "nothing to do" runs, and it keeps the directory small enough
+# that scanning it every few minutes stays cheap. Coalescing (a tick is skipped
+# while the previous run is still going) makes 156 an upper bound.
 _HISTORY_MAX_ENTRIES = 5000
-_HISTORY_MAX_AGE_DAYS = 30
+_HISTORY_MAX_AGE_DAYS = 90
 
 
 def _utcnow() -> str:
