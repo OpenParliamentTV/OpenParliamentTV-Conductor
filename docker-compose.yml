@@ -10,6 +10,12 @@ services:
         GIT_SHA: ${GIT_SHA:-unknown}
     container_name: openparliamenttv-conductor
     restart: unless-stopped
+    # Run Docker's tini as PID 1 so orphaned grandchildren get reaped. Without it
+    # uvicorn is PID 1 and never waits on processes it didn't start: every
+    # `git pull` (two per job) daemonizes a `git maintenance run --auto --detach`
+    # that is reparented to PID 1 and stays a zombie, holding a pid until the
+    # pids cgroup is full and every spawn fails with EAGAIN.
+    init: true
     env_file:
       - ./config/secrets.env
     environment:

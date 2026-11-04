@@ -17,7 +17,7 @@ Once `__commit__` is reliably populated on a deployment, it supersedes it.
 
 import os
 
-__version__ = "2026-08-26-commit-stamp"
+__version__ = "2026-11-05-init-reaper"
 
 # "unknown" is the Dockerfile's ARG default, i.e. nobody stamped this image.
 # Normalized to None so /health shows a null rather than a plausible-looking
