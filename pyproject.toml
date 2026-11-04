@@ -1,2 +1,4 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Where setup.sh clones Tools; lets tests import the real optv package.
+pythonpath = ["data/OpenParliamentTV-Tools"]
