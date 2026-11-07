@@ -7,6 +7,7 @@ Bypasses the OAuth flow by minting a JWT directly and placing it in a cookie.
 from __future__ import annotations
 
 import json
+import platform
 import shutil
 import sys
 from pathlib import Path
@@ -166,6 +167,9 @@ def test_health(app_client):
     # the key itself must always be present, since its absence is what
     # identifies a pre-stamping build.
     assert "commit" in body and body["commit"] == __commit__
+    # Shows whether a rebuild picked up a newer base image, which `commit`
+    # can't: the interpreter version comes from the base.
+    assert body["python"] == platform.python_version()
 
 
 def test_auth_me(app_client):

@@ -63,9 +63,21 @@ The image carries no git checkout (the Dockerfile copies `src/` only), so build 
 
 - `commit` — the git SHA, from the Dockerfile's `GIT_SHA` build arg, which [scripts/self-update.sh](scripts/self-update.sh) fills with the commit it just pulled. Null for images built any other way. **The `ARG`/`ENV` pair sits at the bottom of the Dockerfile on purpose**: the value changes every commit, and anything above it (apt, pip, the spaCy model) must stay cached or a Pi rebuild goes from seconds to very long.
 - `version` — `__version__` in [src/\_\_init\_\_.py](src/__init__.py), hand-set. Still the fallback that answers "did my push land?" on an unstamped image; bump it when that matters. Every job log's first line carries it.
+- `python` — the interpreter version, which comes from the base image. It moves only when the image was rebuilt on a newer base, which `commit` can't show.
 - `started_at` — process start, i.e. when the container was last recreated.
 
-Note that changes to `self-update.sh` take effect only on the **run after** they are pulled: cron executes the copy already on disk, and the pull replaces it mid-run.
+Note that changes to `self-update.sh` take effect only on the **run after** they are pulled: cron executes the copy already on disk, and the pull replaces it mid-run. On a host reachable only by pushing, a `self-update.sh` that fails before `git pull` can never receive its own fix, so keep anything new after the pull.
+
+### Keeping images patched
+
+**Nothing refreshes images automatically.** `self-update.sh`'s `up -d --build` never re-pulls a base image the host already has, and reuses the apt and pip layers until `requirements.txt` changes, so Debian and PyPI security fixes only arrive when a fresh build is forced. To force one:
+
+- **With shell access:** `docker compose build --pull --no-cache app && docker compose up -d app && docker image prune -f`. For nginx: `docker compose --profile production pull nginx && docker compose --profile production up -d nginx`.
+- **Push-only:** change something that invalidates the cached layers. A new `FROM` tag the host has never pulled forces a fresh base and a full rebuild. A `requirements.txt` change rebuilds pip and everything above it, but not apt. Confirm via `/health` (`python`, `started_at`).
+
+After each rebuild, `self-update.sh` prunes the previous image (left untagged by the rebuild) so leftovers don't pile up on disk. The prune is scoped to this repo's images by the Dockerfile's `org.opencontainers.image.title` label, so other projects on a shared host are never touched. Keep the label and the filter in sync. Images built without the label aren't covered; remove those by hand. A failed prune only logs a warning.
+
+The better approach is CI-built images (scheduled `--pull` builds plus a scan, pushed to a registry, with the host only pulling), not more automation in `self-update.sh`, which should stay minimal. The base is `python:3.11-slim-trixie` rather than `3.11-slim` so it can't silently jump to the next Debian release.
 
 ### Stages
 

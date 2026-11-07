@@ -82,7 +82,7 @@ services:
     restart: unless-stopped
     profiles: [ner]
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     volumes:
       - ./data/entity-fishing-db/db-kb:/opt/entity-fishing/data/db/db-kb
       - ./data/entity-fishing-db/db-en:/opt/entity-fishing/data/db/db-en

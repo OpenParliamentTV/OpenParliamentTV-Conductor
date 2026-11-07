@@ -1,4 +1,10 @@
-FROM python:3.11-slim
+# The Debian release is named so the base can't silently jump to the next one
+# when Docker re-points `3.11-slim`; the tag still floats over Debian security
+# updates and Python patch releases. A plain `--build` never re-pulls a base the
+# host already has and keeps reusing the apt/pip layers, so the image only picks
+# up security fixes when something forces a fresh build (see CLAUDE.md, "Keeping
+# images patched").
+FROM python:3.11-slim-trixie
 
 WORKDIR /app
 
@@ -35,6 +41,12 @@ RUN mkdir -p /app/status /app/logs
 
 # Make Tools importable without editing sys.path in app code
 ENV PYTHONPATH="/data/OpenParliamentTV-Tools:${PYTHONPATH}"
+
+# Identifies images built from this repo, so scripts/self-update.sh can prune its
+# own leftover images without touching other projects' on a shared host. Keep
+# the value in sync with the prune filter there, and keep it below the expensive
+# layers.
+LABEL org.opencontainers.image.title="openparliamenttv-conductor"
 
 # Build provenance — the image carries no git checkout, so this is the only way
 # it can name the commit it came from. Declared after COPY src/ deliberately:

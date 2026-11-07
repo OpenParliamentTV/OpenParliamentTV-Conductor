@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import platform
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -110,13 +111,16 @@ async def health() -> dict:
     stamped it. `version` is the hand-set fallback that answers "did my push
     land?" even on an unstamped image. `started_at` is when this process began,
     i.e. when the container was last recreated, which is what
-    `scripts/self-update.sh` does after a pull. All three are readable in a
-    browser without authentication, which matters when the only access to a
+    `scripts/self-update.sh` does after a pull. `python` is the interpreter
+    version, which comes from the base image, so it shows whether a rebuild
+    picked up a newer base, which `commit` can't. All of these are readable in
+    a browser without authentication, which matters when the only access to a
     deployment is its URL.
     """
     return {
         "status": "healthy",
         "commit": __commit__,
         "version": __version__,
+        "python": platform.python_version(),
         "started_at": _STARTED_AT,
     }

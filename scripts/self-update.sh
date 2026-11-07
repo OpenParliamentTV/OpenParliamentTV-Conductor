@@ -73,4 +73,11 @@ log "Updated $BEFORE -> $AFTER — rebuilding app container"
 # that was already on disk, and the pull above replaces it mid-run.
 export GIT_SHA="$AFTER"
 "${COMPOSE[@]}" up -d --build app
+# The rebuild moved the tag to the new image and left the previous one untagged;
+# without this they pile up on disk with every update. Scoped by the Dockerfile's
+# LABEL to this repo's images, so other projects on the host are never touched,
+# and like any `image prune` it only removes untagged images no container uses.
+# Runs after the deploy, so a failure here is harmless.
+docker image prune -f --filter label=org.opencontainers.image.title=openparliamenttv-conductor \
+    || log "WARNING: docker image prune failed"
 log "Done"
